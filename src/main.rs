@@ -6,6 +6,7 @@ extern crate gfx;
 extern crate gfx_voxel;
 extern crate shader_version;
 extern crate find_folder;
+extern crate rand;
 
 
 use piston_window::*;
@@ -20,6 +21,7 @@ use camera_controllers::{
     model_view_projection
 };
 use std::collections::HashMap;
+use rand::Rng;
 
 //----------------------------------------
 // Cube associated data
@@ -27,11 +29,11 @@ use std::collections::HashMap;
 gfx_vertex_struct!( Vertex {
     a_pos: [f32; 3] = "a_pos",
     a_tex_coord: [f32; 2] = "a_tex_coord",
-    a_color: [f32; 3] = "a_color_coord",
+    a_color: [f32; 4] = "a_color",
 });
 
 impl Vertex {
-    fn new(pos: [f32; 3], tc: [f32; 2], col: [f32; 3]) -> Vertex {
+    fn new(pos: [f32; 3], tc: [f32; 2], col: [f32; 4]) -> Vertex {
         Vertex {
             a_pos: pos,
             a_tex_coord: [tc[0], tc[1]],
@@ -49,18 +51,31 @@ gfx_pipeline!( pipe {
         gfx::preset::depth::LESS_EQUAL_WRITE,
 });
 
-const VX:[i32;4] = [1,0,0,1];
-const VY:[i32;4] = [1,1,0,0];
 const TEXWIDTH:f32 = 4.0;
+const TRANS:[[[i32;4];2];8] = [
+    [[1,0,0,1,],[1,1,0,0,]],
+    [[0,0,1,1,],[1,0,0,1,]],
+    [[0,1,1,0,],[0,0,1,1,]],
+    [[1,1,0,0,],[0,1,1,0,]],
+    [[0,1,1,0,],[1,1,0,0,]],
+    [[1,1,0,0,],[1,0,0,1,]],
+    [[1,0,0,1,],[0,0,1,1,]],
+    [[0,0,1,1,],[0,1,1,0,]],
+];
 
 #[derive(Copy,Clone)]
 struct Block {
-    color: [f32;3],
+    color: [f32;4],
+    textrans:[[[i32;4];2];6],
 }
 
 impl Block {
-    fn new() -> Block {
-        Block{color: [0.0,0.0,0.0]}
+    fn new(rng: usize, c: [f32;4]) -> Block {
+        Block {
+            color: c,
+            textrans: [TRANS[(rng>>00)%8], TRANS[(rng>>03)%8], TRANS[(rng>>06)%8], 
+                       TRANS[(rng>>09)%8], TRANS[(rng>>12)%8], TRANS[(rng>>15)%8], ]
+        }
     }
 }
 
@@ -135,7 +150,8 @@ impl Chunk {
 
         for x in 0..16 { for y in 0..16 { for z in 0..16 {
         if let Rich(b) = self.at(x,y,z) {
-        for face in cube::FaceIterator::new() {
+        for f in 0..6 {
+            let face = cube::Face::from_usize(f).unwrap();
             if let Empty = self.nearly_at((face.direction()[0] + x as i32),
                                           (face.direction()[1] + y as i32),
                                           (face.direction()[2] + z as i32)){
@@ -148,8 +164,9 @@ impl Chunk {
                 let v = face.vertices([rx as f32, ry as f32, rz as f32], [1f32,1f32,1f32]);
                 for i in 0..4{
                     self.vertex_data.push(Vertex::new([v[i][0], v[i][1], v[i][2]],
-                                                [VX[i] as f32 / TEXWIDTH, VY[i] as f32 / TEXWIDTH],
-                                                [0.0, 0.0, 0.0]));
+                                                [b.textrans[f][0][i] as f32 / TEXWIDTH,
+                                                 b.textrans[f][1][i] as f32 / TEXWIDTH],
+                                                 b.color));
                 }
             }
         }}
@@ -189,13 +206,15 @@ fn main() {
 
     let ref mut factory = window.factory.clone();
 
+    let mut rng = rand::thread_rng();
+
     let mut c = Chunk::new_empty(0,0,0);
-    c.put(5,1,6,Block::new());
-    c.put(5,2,7,Block::new());
-    c.put(5,3,8,Block::new());
-    c.put(5,4,9,Block::new());
+    c.put(5,1,6,Block::new(rng.gen::<usize>(), [1.0, 0.0, 0.0, 1.0]));
+    c.put(5,2,7,Block::new(rng.gen::<usize>(), [0.0, 1.0, 0.0, 1.0]));
+    c.put(5,3,8,Block::new(rng.gen::<usize>(), [0.0, 0.0, 1.0, 1.0]));
+    c.put(5,4,9,Block::new(rng.gen::<usize>(), [1.0, 1.0, 1.0, 1.0]));
     for x in 0..16 { for z in 0..16 {
-        c.put(x,0,z,Block::new());
+        c.put(x,0,z,Block::new(rng.gen::<usize>(), [0.0, 0.0, 0.0, 1.0]));
     }}
 
     let (vbuf, slice) = factory.create_vertex_buffer_with_slice
