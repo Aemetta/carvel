@@ -1,0 +1,15 @@
+[package]
+name = "carvel"
+version = "0.1.0"
+authors = ["Aemetta"]
+
+[dependencies]
+piston_window = "0.73.0"
+piston3d-gfx_voxel = "0.22.0"
+find_folder = "0.3.0"
+gfx = "0.16.0"
+gfx_device_gl = "0.14.0"
+vecmath = "0.3.0"
+camera_controllers = "0.23.0"
+rand = "0.3.14"
+shader_version = "0.3.0"
