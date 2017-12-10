@@ -72,12 +72,14 @@ dependencies = [
 name = "carvel"
 version = "0.1.0"
 dependencies = [
+ "bitflags 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "camera_controllers 0.23.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "find_folder 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "gfx 0.16.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "gfx_device_gl 0.14.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "piston3d-gfx_voxel 0.22.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "piston_window 0.73.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pistoncore-input 0.20.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "shader_version 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "vecmath 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",

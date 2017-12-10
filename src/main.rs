@@ -8,20 +8,31 @@ extern crate shader_version;
 extern crate find_folder;
 extern crate rand;
 
+#[macro_use]
+extern crate bitflags;
+extern crate input;
+
+mod player;
+use player::{
+    FirstPersonSettings,
+    FirstPerson
+};
+
+mod world;
+use world::{
+    Block, Spot, Chunk, Milieu
+};
 
 use piston_window::*;
 use gfx::traits::*;
-use gfx_voxel::{array, cube, texture};
 use shader_version::Shaders;
 use shader_version::glsl::GLSL;
 use camera_controllers::{
-    FirstPersonSettings,
-    FirstPerson,
     CameraPerspective,
     model_view_projection
 };
-use std::collections::HashMap;
 use rand::Rng;
+use gfx_voxel::texture;
 
 //----------------------------------------
 // Cube associated data
@@ -51,147 +62,20 @@ gfx_pipeline!( pipe {
         gfx::preset::depth::LESS_EQUAL_WRITE,
 });
 
-const TEXWIDTH:f32 = 4.0;
-const TRANS:[[[i32;4];2];8] = [
-    [[1,0,0,1,],[1,1,0,0,]],
-    [[0,0,1,1,],[1,0,0,1,]],
-    [[0,1,1,0,],[0,0,1,1,]],
-    [[1,1,0,0,],[0,1,1,0,]],
-    [[0,1,1,0,],[1,1,0,0,]],
-    [[1,1,0,0,],[1,0,0,1,]],
-    [[1,0,0,1,],[0,0,1,1,]],
-    [[0,0,1,1,],[0,1,1,0,]],
-];
-
-#[derive(Copy,Clone)]
-struct Block {
-    color: [f32;4],
-    textrans:[[[i32;4];2];6],
-}
-
-impl Block {
-    fn new(rng: usize, c: [f32;4]) -> Block {
-        Block {
-            color: c,
-            textrans: [TRANS[(rng>>00)%8], TRANS[(rng>>03)%8], TRANS[(rng>>06)%8], 
-                       TRANS[(rng>>09)%8], TRANS[(rng>>12)%8], TRANS[(rng>>15)%8], ]
-        }
-    }
-}
-
-#[derive(Copy,Clone)]
-enum Spot {
-    Empty,
-    Full,
-    Rich(Block),
-}
-use Spot::{Empty, Full, Rich};
-
-struct Chunk {
-    bigpos: [i32;3],
-    small: [[[Spot;16];16];16],
-    filled: bool,
-    vertex_data: Vec<Vertex>,
-    index_data: Vec<u32>,
-}
-
-impl Chunk {
-    pub fn new_full(x: i32, y: i32, z: i32) -> Chunk {
-        Chunk{
-            bigpos: [x, y, z],
-            small: [[[Full;16];16];16],
-            filled: true,
-            vertex_data: Vec::new(),
-            index_data: Vec::new(),
-        }
-    }
-    pub fn new_empty(x: i32, y: i32, z: i32) -> Chunk {
-        Chunk{
-            bigpos: [x, y, z],
-            small: [[[Empty;16];16];16],
-            filled: false,
-            vertex_data: Vec::new(),
-            index_data: Vec::new(),
-        }
-    }
-    pub fn at(&self, x: usize, y: usize, z: usize) -> Spot {
-        assert!(x < 16 && y < 16 && z < 16);
-        self.small[x][y][z]
-    }
-    pub fn try_at(&self, x: usize, y: usize, z: usize) -> Option<Spot> {
-        if(x < 16 && y < 16 && z < 16){
-            Some(self.small[x][y][z])
-        } else {None}
-    }
-    pub fn nearly_at(&self, x: i32, y: i32, z:i32) -> Spot {
-        match self.try_at(x as usize, y as usize, z as usize){
-            Some(s) => {s}
-            None => {Empty}
-        }
-    }
-    pub fn put(&mut self, x: usize, y: usize, z: usize, b: Block) {
-        assert!(x < 16 && y < 16 && z < 16);
-        self.small[x][y][z] = Rich(b);
-        self.update();
-    }
-    pub fn yank(&mut self, x: usize, y: usize, z: usize) -> Option<Block> {
-        assert!(x < 16 && y < 16 && z < 16);
-        if let Rich(b) = self.small[x][y][z]{
-            self.small[x][y][z] = Empty;
-            self.update();
-            Some(b)
-        } else {
-            None
-        }
-    }
-    fn update(&mut self) {
-        self.vertex_data = Vec::new();
-        self.index_data = Vec::new();
-
-        for x in 0..16 { for y in 0..16 { for z in 0..16 {
-        if let Rich(b) = self.at(x,y,z) {
-        for f in 0..6 {
-            let face = cube::Face::from_usize(f).unwrap();
-            if let Empty = self.nearly_at((face.direction()[0] + x as i32),
-                                          (face.direction()[1] + y as i32),
-                                          (face.direction()[2] + z as i32)){
-                let l = self.vertex_data.len() as u32;
-                self.index_data.extend_from_slice(&[l+0,l+1,l+2,l+0,l+2,l+3]);
-
-                let (rx, ry, rz) = (self.bigpos[0]*16+x as i32,
-                                    self.bigpos[1]*16+y as i32,
-                                    self.bigpos[2]*16+z as i32);
-                let v = face.vertices([rx as f32, ry as f32, rz as f32], [1f32,1f32,1f32]);
-                for i in 0..4{
-                    self.vertex_data.push(Vertex::new([v[i][0], v[i][1], v[i][2]],
-                                                [b.textrans[f][0][i] as f32 / TEXWIDTH,
-                                                 b.textrans[f][1][i] as f32 / TEXWIDTH],
-                                                 b.color));
-                }
-            }
-        }}
-        }}}
-    }
-}
-
-struct Milieu {
-    big: HashMap<(i32, i32, i32), Chunk>
-}
-
-impl Milieu {
-    fn get_chunk(){
-
-    }
-    fn at(&self, x: i32, y: i32, z: i32){
-        let (bx, by, bz) = (x/16, y/16, z/16);
-        let (sx, sy, sz) = (x%16, y%16, z%16);
-
-    }
-}
-
 //----------------------------------------
 
 fn main() {
+
+    let mut rng = rand::thread_rng();
+
+    let mut m = Milieu::new_empty();
+    m.put(5,1,6,Block::new(rng.gen::<usize>(), [1.0, 0.0, 0.0, 1.0]));
+    m.put(5,2,7,Block::new(rng.gen::<usize>(), [0.0, 1.0, 0.0, 1.0]));
+    m.put(5,3,8,Block::new(rng.gen::<usize>(), [0.0, 0.0, 1.0, 1.0]));
+    m.put(5,4,9,Block::new(rng.gen::<usize>(), [1.0, 1.0, 1.0, 1.0]));
+    for x in 0..32 { for z in 0..32 {
+        m.put(x,0,z,Block::new(rng.gen::<usize>(), [x as f32 * (1.0/32.0), 0.0, z as f32 * (1.0/32.0), 1.0]));
+    }}
 
     let opengl = OpenGL::V3_2;
 
@@ -205,20 +89,6 @@ fn main() {
         .unwrap());
 
     let ref mut factory = window.factory.clone();
-
-    let mut rng = rand::thread_rng();
-
-    let mut c = Chunk::new_empty(0,0,0);
-    c.put(5,1,6,Block::new(rng.gen::<usize>(), [1.0, 0.0, 0.0, 1.0]));
-    c.put(5,2,7,Block::new(rng.gen::<usize>(), [0.0, 1.0, 0.0, 1.0]));
-    c.put(5,3,8,Block::new(rng.gen::<usize>(), [0.0, 0.0, 1.0, 1.0]));
-    c.put(5,4,9,Block::new(rng.gen::<usize>(), [1.0, 1.0, 1.0, 1.0]));
-    for x in 0..16 { for z in 0..16 {
-        c.put(x,0,z,Block::new(rng.gen::<usize>(), [0.0, 0.0, 0.0, 1.0]));
-    }}
-
-    let (vbuf, slice) = factory.create_vertex_buffer_with_slice
-        (&c.vertex_data, c.index_data.as_slice());
 
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets").unwrap();
@@ -262,47 +132,51 @@ fn main() {
         }.projection()
     };
 
-    let mut first_person_settings = FirstPersonSettings::keyboard_wasd();
-    first_person_settings.speed_horizontal = 5.0;
-    first_person_settings.speed_vertical = 5.0;
-    first_person_settings.move_forward_button = Button::from(Key::W);
-    first_person_settings.move_backward_button = Button::from(Key::R);
-    first_person_settings.strafe_left_button = Button::from(Key::A);
-    first_person_settings.strafe_right_button = Button::from(Key::S);
-
-    let model = vecmath::mat4_id();
-    let mut projection = get_projection(&window);
-    let mut first_person = FirstPerson::new(
-        [8.0, 4.0, 12.0],
+    let mut first_person_settings = FirstPersonSettings::keyboard_wars();
+    first_person_settings.speed_horizontal = 10.0;
+    first_person_settings.speed_vertical = 10.0;
+    first_person_settings.gravity = 100.0;
+    first_person_settings.jump_force = 25.0;
+    let mut player = FirstPerson::new(
+        [8.0, 1.0, 12.0],
         first_person_settings
     );
 
     let mut data = pipe::Data {
-            vbuf: vbuf.clone(),
-            u_model_view_proj: [[0.0; 4]; 4],
-            t_color: (texture.view, factory.create_sampler(sinfo)),
-            out_color: window.output_color.clone(),
-            out_depth: window.output_stencil.clone(),
-        };
+        vbuf: factory.create_vertex_buffer(&[]),
+        u_model_view_proj: [[0.0; 4]; 4],
+        t_color: (texture.view, factory.create_sampler(sinfo)),
+        out_color: window.output_color.clone(),
+        out_depth: window.output_stencil.clone(),
+    };
+
+    let model = vecmath::mat4_id();
+    let mut projection = get_projection(&window);
 
     window.set_capture_cursor(true);
 
     while let Some(e) = window.next() {
-        first_person.event(&e);
+        player.event(&e, &mut m);
 
         window.draw_3d(&e, |window| {
             let args = e.render_args().unwrap();
 
             window.encoder.clear(&window.output_color, [0.3, 0.3, 0.3, 1.0]);
             window.encoder.clear_depth(&window.output_stencil, 1.0);
+            
+            //m.refresh();
+            let (vertex_data, index_data) = m.get_vertex_data();
+
+            let (vbuf, slice) = factory.create_vertex_buffer_with_slice
+                (&vertex_data, index_data.as_slice());
+
+            data.vbuf = vbuf.clone();
 
             data.u_model_view_proj = model_view_projection(
                 model,
-                first_person.camera(args.ext_dt).orthogonal(),
+                player.camera().orthogonal(),
                 projection
             );
-            //let (vbuf, slice) = factory.create_vertex_buffer_with_slice
-            //                            (&vertex_data, index_data);
 
             window.encoder.draw(&slice, &pso, &data);
         });
@@ -310,8 +184,6 @@ fn main() {
         window.draw_2d(&e, |c, g| {
             Image::new().draw(&crosshair, &draw_state, c.transform.trans(reticule.0, reticule.1), g);
         });
-
-        //swindow.set_capture_cursor(true);
 
         if let Some(_) = e.resize_args() {
             projection = get_projection(&window);
