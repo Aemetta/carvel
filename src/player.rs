@@ -4,6 +4,7 @@
 /// Stolen and modified from the camera_controllers crate to work as a player object instead
 
 use input::{ Button, GenericEvent };
+use vecmath;
 use vecmath::traits::{ Float, Radians };
 
 use camera_controllers::Camera;
@@ -28,6 +29,8 @@ pub struct FirstPersonSettings {
     pub jump_button: Button,
     pub crawl_button: Button,
     pub booster_button: Button,
+    pub break_button: Button,
+    pub place_button: Button,
     pub speed_horizontal: f32,
     pub speed_vertical: f32,
     pub mouse_sensitivity_horizontal: f32,
@@ -39,8 +42,9 @@ pub struct FirstPersonSettings {
 impl FirstPersonSettings
 {
     pub fn keyboard_wasd() -> FirstPersonSettings {
-        use input::Button::Keyboard;
+        use input::Button::{Keyboard, Mouse};
         use input::Key;
+        use input::mouse::MouseButton;
 
         FirstPersonSettings {
             move_forward_button: Keyboard(Key::W),
@@ -50,6 +54,8 @@ impl FirstPersonSettings
             jump_button: Keyboard(Key::Space),
             crawl_button: Keyboard(Key::LShift),
             booster_button: Keyboard(Key::LCtrl),
+            break_button: Mouse(MouseButton::Left),
+            place_button: Keyboard(Key::E),
             speed_horizontal: 1.0,
             speed_vertical: 1.0,
             gravity: 1.0,
@@ -60,8 +66,9 @@ impl FirstPersonSettings
     }
 
     pub fn keyboard_wars() -> FirstPersonSettings {
-        use input::Button::Keyboard;
+        use input::Button::{Keyboard, Mouse};
         use input::Key;
+        use input::mouse::MouseButton;
 
         FirstPersonSettings {
             move_forward_button: Keyboard(Key::W),
@@ -71,6 +78,8 @@ impl FirstPersonSettings
             jump_button: Keyboard(Key::Space),
             crawl_button: Keyboard(Key::LShift),
             booster_button: Keyboard(Key::LCtrl),
+            break_button: Mouse(MouseButton::Left),
+            place_button: Mouse(MouseButton::Right),
             speed_horizontal: 1.0,
             speed_vertical: 1.0,
             gravity: 1.0,
@@ -81,8 +90,16 @@ impl FirstPersonSettings
     }
 }
 
+enum InteractionState {
+    Idle,
+    Mining,
+    Placing,
+}
+use self::InteractionState::{Idle,Mining,Placing};
+
 pub struct FirstPerson {
     pub settings: FirstPersonSettings,
+    state: InteractionState,
     pub yaw: f32,
     pub pitch: f32,
     pub direction: [f32; 3],
@@ -103,6 +120,7 @@ impl FirstPerson {
     ) -> FirstPerson {
         FirstPerson {
             settings: settings,
+            state: Idle,
             yaw: 0.0,
             pitch: 0.0,
             keys: Keys::empty(),
@@ -111,7 +129,7 @@ impl FirstPerson {
             force: 1.0,
             velocity: [0.0, 0.0, 0.0],
             on_ground: true,
-            noclip: false,
+            noclip: true,
             head_offset: 2.4,
             head_offset_crawl: 0.8,
         }
@@ -127,8 +145,10 @@ impl FirstPerson {
         c
     }
 
-    pub fn event<E>(&mut self, e: &E, mut m: &world::Milieu) where E: GenericEvent {
+    pub fn event<E>(&mut self, e: &E, m: &mut world::Milieu) where E: GenericEvent {
 
+        let c = self.camera();
+        let (point_full, point_empty) = select(c.position, c.forward, m);
         let &mut FirstPerson {
             ref mut yaw,
             ref mut pitch,
@@ -138,6 +158,7 @@ impl FirstPerson {
             ref mut position,
             ref mut force,
             ref mut on_ground,
+            ref mut state,
             ref noclip,
             ref settings,
             ..
@@ -159,22 +180,41 @@ impl FirstPerson {
                 velocity[1] = dy * settings.speed_vertical;
                 velocity[2] = zo;
             } else {
-                velocity[0] += xo * dt;
+                velocity[0] += xo * dt * 5.0;
                 velocity[1] += -settings.gravity * dt;
-                velocity[2] += zo * dt;
+                velocity[2] += zo * dt * 5.0;
             }
 
             position[0] += (velocity[0] * dt) as f64;
             position[1] += (velocity[1] * dt) as f64;
             position[2] += (velocity[2] * dt) as f64;
 
-            if let Some(b) = m.at(position[0] as i32,
-                                  position[1] as i32,
-                                  position[2] as i32){
-                if !b.isEmpty() {
-                    position[1] = position[1].ceil();
-                    *on_ground = true;
-            }}
+            if !*on_ground
+                if let Some(b) = m.at(position[0] as i32,
+                                      position[1] as i32,
+                                      position[2] as i32){
+                    if !b.is_empty() {
+                        position[1] = position[1].ceil();
+                        *on_ground = true;
+            }}}
+
+            match *state {
+                Idle => {},
+                Mining => {
+                    if let Some((x,y,z)) = point_full {
+                        m.pull(x,y,z);
+                    }
+                    //*state = Idle;
+                },
+                Placing => {
+                    if let Some((x,y,z)) = point_empty {
+                        m.put(x,y,z, world::Block::new(
+                            0, [1.0, 1.0, 1.0, 1.0]
+                        ));
+                    }
+                    //*state = Idle;
+                },
+            }
         });
 
         e.mouse_relative(|dx, dy| {
@@ -218,6 +258,12 @@ impl FirstPerson {
                     else { set(Keys::CRAWL, dx, 0.0, dz);
                            *force = 1.0 / 2.0;},
                 x if x == settings.booster_button => {},
+                x if x == settings.break_button => {
+                    *state = Mining;
+                },
+                x if x == settings.place_button => {
+                    *state = Placing;
+                },
                 _ => {}
             }
         });
@@ -254,8 +300,46 @@ impl FirstPerson {
                     else { release(Keys::CRAWL, Keys::JUMP, 0.0);
                            *force = 1.0;},
                 x if x == settings.booster_button => {},
+                x if x == settings.break_button => {
+                    *state = Idle;
+                },
+                x if x == settings.place_button => {
+                    *state = Idle;
+                },
                 _ => {}
             }
         });
     }
+}
+
+fn select(pos: [f32;3], dir: [f32;3], m: &mut world::Milieu)
+        -> (Option<(i32, i32, i32)>, Option<(i32, i32, i32)>){
+    let mut full = None;
+    let mut empty = None;
+
+    let pos = [pos[0]-0.5, pos[1]-0.5, pos[2]-0.5];
+
+    use line_drawing::WalkVoxels;
+    let dir = vecmath::vec3_neg(dir);
+    let dir = vecmath::vec3_scale(dir, 10.0);
+    let end = vecmath::vec3_add(pos, dir);
+
+    let mut temp = None;
+    for (i, (x, y, z)) in WalkVoxels::<f32, i32>::new(
+                                (pos[0], pos[1], pos[2]),
+                                (end[0], end[1], end[2])).enumerate() {
+
+        if let Some(b) = m.at(x, y, z){
+            if !b.is_empty() {
+                empty = temp;
+                full = Some((x, y, z));
+                break;
+            } else {
+                temp = Some((x, y, z));
+            }
+        } else {
+            temp = Some((x, y, z));
+        }
+    }
+    (full, empty)
 }

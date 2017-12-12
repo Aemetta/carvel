@@ -7,10 +7,10 @@ extern crate gfx_voxel;
 extern crate shader_version;
 extern crate find_folder;
 extern crate rand;
-
 #[macro_use]
 extern crate bitflags;
 extern crate input;
+extern crate line_drawing;
 
 mod player;
 use player::{
@@ -68,19 +68,24 @@ fn main() {
 
     let mut rng = rand::thread_rng();
 
-    let mut m = Milieu::new_empty();
+    /*let mut m = Milieu::new_empty();
     m.put(5,1,6,Block::new(rng.gen::<usize>(), [1.0, 0.0, 0.0, 1.0]));
     m.put(5,2,7,Block::new(rng.gen::<usize>(), [0.0, 1.0, 0.0, 1.0]));
     m.put(5,3,8,Block::new(rng.gen::<usize>(), [0.0, 0.0, 1.0, 1.0]));
     m.put(5,4,9,Block::new(rng.gen::<usize>(), [1.0, 1.0, 1.0, 1.0]));
-    for x in 0..32 { for z in 0..32 {
+    for x in -16..32 { for z in -16..32 {
         m.put(x,0,z,Block::new(rng.gen::<usize>(), [x as f32 * (1.0/32.0), 0.0, z as f32 * (1.0/32.0), 1.0]));
-    }}
+    }}*/
+
+    let mut m = Milieu::new_full();
+    for x in 6..10 { for y in 6..10 { for z in 6..10 {
+        m.pull(x,y,z);
+    }}}
 
     let opengl = OpenGL::V3_2;
 
     let mut window: PistonWindow = PistonWindow::new(opengl, 0,
-        WindowSettings::new("piston: cube", [640, 480])
+        WindowSettings::new("CARVEL", [640, 480])
         .exit_on_esc(true)
         .samples(4)
         .opengl(opengl)
@@ -101,7 +106,7 @@ fn main() {
         ).unwrap();
     
     let mut reticule: (f64, f64) = (0f64, 0f64);
-    let draw_state = piston_window::DrawState::new_alpha();//.blend(piston_window::draw_state::Blend::Invert);
+    let draw_state = piston_window::DrawState::new_alpha().blend(piston_window::draw_state::Blend::Add);
 
     let mut atlas = texture::AtlasBuilder::new(assets.join("blocks"), 256, 256);
     let offset = atlas.load("ground");
@@ -138,7 +143,7 @@ fn main() {
     first_person_settings.gravity = 100.0;
     first_person_settings.jump_force = 25.0;
     let mut player = FirstPerson::new(
-        [8.0, 1.0, 12.0],
+        [8.0, 5.0, 8.0],
         first_person_settings
     );
 
@@ -171,12 +176,9 @@ fn main() {
                 (&vertex_data, index_data.as_slice());
 
             data.vbuf = vbuf.clone();
+            let c = player.camera();
 
-            data.u_model_view_proj = model_view_projection(
-                model,
-                player.camera().orthogonal(),
-                projection
-            );
+            data.u_model_view_proj = model_view_projection(model, c.orthogonal(), projection);
 
             window.encoder.draw(&slice, &pso, &data);
         });
