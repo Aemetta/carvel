@@ -11,6 +11,8 @@ extern crate rand;
 extern crate bitflags;
 extern crate input;
 extern crate line_drawing;
+extern crate noise;
+extern crate fps_counter;
 
 mod player;
 use player::{
@@ -20,8 +22,10 @@ use player::{
 
 mod world;
 use world::{
-    Block, Spot, Chunk, Milieu
+    Vertex, Block, Spot, Milieu
 };
+
+mod gen;
 
 use piston_window::*;
 use gfx::traits::*;
@@ -31,27 +35,10 @@ use camera_controllers::{
     CameraPerspective,
     model_view_projection
 };
-use rand::Rng;
 use gfx_voxel::texture;
 
 //----------------------------------------
 // Cube associated data
-
-gfx_vertex_struct!( Vertex {
-    a_pos: [f32; 3] = "a_pos",
-    a_tex_coord: [f32; 2] = "a_tex_coord",
-    a_color: [f32; 4] = "a_color",
-});
-
-impl Vertex {
-    fn new(pos: [f32; 3], tc: [f32; 2], col: [f32; 4]) -> Vertex {
-        Vertex {
-            a_pos: pos,
-            a_tex_coord: [tc[0], tc[1]],
-            a_color: col,
-        }
-    }
-}
 
 gfx_pipeline!( pipe {
     vbuf: gfx::VertexBuffer<Vertex> = (),
@@ -65,17 +52,6 @@ gfx_pipeline!( pipe {
 //----------------------------------------
 
 fn main() {
-
-    let mut rng = rand::thread_rng();
-
-    /*let mut m = Milieu::new_empty();
-    m.put(5,1,6,Block::new(rng.gen::<usize>(), [1.0, 0.0, 0.0, 1.0]));
-    m.put(5,2,7,Block::new(rng.gen::<usize>(), [0.0, 1.0, 0.0, 1.0]));
-    m.put(5,3,8,Block::new(rng.gen::<usize>(), [0.0, 0.0, 1.0, 1.0]));
-    m.put(5,4,9,Block::new(rng.gen::<usize>(), [1.0, 1.0, 1.0, 1.0]));
-    for x in -16..32 { for z in -16..32 {
-        m.put(x,0,z,Block::new(rng.gen::<usize>(), [x as f32 * (1.0/32.0), 0.0, z as f32 * (1.0/32.0), 1.0]));
-    }}*/
 
     let mut m = Milieu::new_full();
     for x in 6..10 { for y in 6..10 { for z in 6..10 {
@@ -97,6 +73,7 @@ fn main() {
 
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets").unwrap();
+    
     let crosshair = assets.join("crosshair.png");
     let crosshair: G2dTexture = Texture::from_path(
             &mut window.factory,
@@ -104,9 +81,11 @@ fn main() {
             Flip::None,
             &TextureSettings::new()
         ).unwrap();
-    
     let mut reticule: (f64, f64) = (0f64, 0f64);
-    let draw_state = piston_window::DrawState::new_alpha().blend(piston_window::draw_state::Blend::Add);
+    let draw_state = piston_window::DrawState::new_alpha();
+
+    let ref font = assets.join("VeraMono.ttf");
+    let mut glyphs = Glyphs::new(font, window.factory.clone(), TextureSettings::new()).unwrap();
 
     let mut atlas = texture::AtlasBuilder::new(assets.join("blocks"), 256, 256);
     let offset = atlas.load("ground");
@@ -159,6 +138,7 @@ fn main() {
     let mut projection = get_projection(&window);
 
     window.set_capture_cursor(true);
+    let mut fps_counter = fps_counter::FPSCounter::new();
 
     while let Some(e) = window.next() {
         player.event(&e, &mut m);
@@ -166,7 +146,7 @@ fn main() {
         window.draw_3d(&e, |window| {
             let args = e.render_args().unwrap();
 
-            window.encoder.clear(&window.output_color, [0.3, 0.3, 0.3, 1.0]);
+            window.encoder.clear(&window.output_color, [0.0, 1.0, 1.0, 1.0]);
             window.encoder.clear_depth(&window.output_stencil, 1.0);
             
             //m.refresh();
@@ -185,6 +165,13 @@ fn main() {
 
         window.draw_2d(&e, |c, g| {
             Image::new().draw(&crosshair, &draw_state, c.transform.trans(reticule.0, reticule.1), g);
+            text::Text::new_color([0.0, 1.0, 0.0, 1.0], 18).draw(
+                &format!("{}", fps_counter.tick()),
+                &mut glyphs,
+                &c.draw_state,
+                c.transform.trans(5.0, 20.0),
+                g
+            ).unwrap();
         });
 
         if let Some(_) = e.resize_args() {

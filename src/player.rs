@@ -189,7 +189,7 @@ impl FirstPerson {
             position[1] += (velocity[1] * dt) as f64;
             position[2] += (velocity[2] * dt) as f64;
 
-            if !*on_ground
+            if !*on_ground {
                 if let Some(b) = m.at(position[0] as i32,
                                       position[1] as i32,
                                       position[2] as i32){
@@ -325,7 +325,7 @@ fn select(pos: [f32;3], dir: [f32;3], m: &mut world::Milieu)
     let end = vecmath::vec3_add(pos, dir);
 
     let mut temp = None;
-    for (i, (x, y, z)) in WalkVoxels::<f32, i32>::new(
+    for (_, (x, y, z)) in WalkVoxels::<f32, i32>::new(
                                 (pos[0], pos[1], pos[2]),
                                 (end[0], end[1], end[2])).enumerate() {
 

@@ -1,8 +1,29 @@
+use gen::Gen;
 
 use gfx_voxel::cube;
 use std::collections::HashMap;
 
-use super::Vertex;
+const SIZE_I: i32 = 4;
+const SIZE_U: usize = SIZE_I as usize;
+const POT: i32 = 2;
+
+gfx_vertex_struct!( Vertex {
+    a_pos: [f32; 3] = "a_pos",
+    a_tex_coord: [f32; 2] = "a_tex_coord",
+    a_color: [f32; 4] = "a_color",
+    a_light: f32 = "a_light",
+});
+
+impl Vertex {
+    fn new(pos: [f32; 3], tc: [f32; 2], col: [f32; 4], light: f32) -> Vertex {
+        Vertex {
+            a_pos: pos,
+            a_tex_coord: [tc[0], tc[1]],
+            a_color: col,
+            a_light: light,
+        }
+    }
+}
 
 const TEXWIDTH:f32 = 4.0;
 const TRANS:[[[i32;4];2];8] = [
@@ -53,7 +74,7 @@ impl Spot {
 #[derive(Debug)]
 pub struct Chunk {
     pub bigpos: [i32;3],
-    small: [[[Spot;16];16];16],
+    small: [[[Spot;SIZE_U];SIZE_U];SIZE_U],
     filled: bool,
     pub request: bool,
 }
@@ -77,20 +98,20 @@ impl Chunk {
         }
     }*/
     fn at(&self, x: usize, y: usize, z: usize) -> &Spot {
-        assert!(x < 16 && y < 16 && z < 16);
+        assert!(x < SIZE_U && y < SIZE_U && z < SIZE_U);
         &self.small[x][y][z]
     }
     fn at_mut(&mut self, x: usize, y: usize, z: usize) -> &mut Spot {
-        assert!(x < 16 && y < 16 && z < 16);
+        assert!(x < SIZE_U && y < SIZE_U && z < SIZE_U);
         &mut self.small[x][y][z]
     }
     fn try_at(&self, x: usize, y: usize, z: usize) -> Option<&Spot> {
-        if x < 16 && y < 16 && z < 16 {
+        if x < SIZE_U && y < SIZE_U && z < SIZE_U {
             Some(&self.small[x][y][z])
         } else {None}
     }
     fn try_at_mut(&mut self, x: usize, y: usize, z: usize) -> Option<&mut Spot> {
-        if x < 16 && y < 16 && z < 16 {
+        if x < SIZE_U && y < SIZE_U && z < SIZE_U {
             Some(&mut self.small[x][y][z])
         } else {None}
     }
@@ -100,56 +121,14 @@ impl Chunk {
             None => {m.at(self.bigpos[0]+x, self.bigpos[1]+y, self.bigpos[2]+z)}
         }
     }
-    fn nearly_at_mut<'a>(&'a mut self, m: &'a mut Milieu, x: i32, y: i32, z: i32, big: [i32;3]) -> &'a mut Spot {
-        match self.try_at_mut(x as usize, y as usize, z as usize){
-            Some(s) => {s}
-            None => {m.at_mut(big[0]+x, big[1]+y, big[2]+z)}
-        }
-    }
-    fn nearly_at_or_full<'a>(&'a self, m: &'a Milieu, x: i32, y: i32, z: i32) -> &'a Spot {
-        match self.try_at(x as usize, y as usize, z as usize){
-            Some(s) => {s}
-            None => {m.at_or_full(self.bigpos[0]+x, self.bigpos[1]+y, self.bigpos[2]+z)}
-        }
-    }
     fn put(&mut self, x: usize, y: usize, z: usize, b: Block) {
-        assert!(x < 16 && y < 16 && z < 16);
+        assert!(x < SIZE_U && y < SIZE_U && z < SIZE_U);
         self.small[x][y][z] = Rich(Box::new(b));
-        self.update();
-    }
-    fn pull(&mut self, x: usize, y: usize, z: usize)
-     -> (Option<Block>, Option<((i32, i32, i32), Block)>) {
-        assert!(x < 16 && y < 16 && z < 16);
-        let block = if let Rich(b) = self.small[x][y][z].clone(){
-            self.small[x][y][z] = Empty;
-            self.update();
-            Some(*b)
-        } else {
-            None
-        };
-
-        let mut reacherblock = None;
-
-        let (x, y, z) = (x as i32, y as i32, z as i32);
-        for face in cube::FaceIterator::new() {
-            let d = face.direction();
-            let (dx, dy, dz) = (x + d[0], y + d[1], z + d[2]);
-            let big = self.bigpos.clone();
-            match self.try_at_mut(dx as usize, dy as usize, dz as usize){
-                Some(b @ &mut Full) => {*b = Rich(Box::new(Block::new(0, [0.3, 0.3, 0.3, 1.0])));},
-                None => {reacherblock = Some(((dx+big[0], dy+big[1], dz+big[2]), Block::new(0, [0.3, 0.3, 0.3, 1.0])));},
-                _ => {},
-            }
-        }
-        self.update();
-
-        (block, reacherblock)
     }
     fn yank(&mut self, x: usize, y: usize, z: usize) -> Option<Block> {
-        assert!(x < 16 && y < 16 && z < 16);
+        assert!(x < SIZE_U && y < SIZE_U && z < SIZE_U);
         if let Rich(b) = self.small[x][y][z].clone(){
             self.small[x][y][z] = Empty;
-            self.update();
             Some(*b)
         } else {
             None
@@ -161,23 +140,24 @@ impl Chunk {
     fn build(&self, m: &Milieu) -> Vec<Vertex> {
         let mut vertices = Vec::new();
 
-        for x in 0..16 { for y in 0..16 { for z in 0..16 {
-        if let &Rich(ref b) = self.at(x,y,z) {
+        for x in 0..SIZE_I { for y in 0..SIZE_I { for z in 0..SIZE_I {
+        if let &Rich(ref b) = self.at(x as usize, y as usize, z as usize) {
         for f in 0..6 {
             let face = cube::Face::from_usize(f).unwrap();
             let d = face.direction();
-            if let &Empty = self.nearly_at_or_full(m,
-                        (d[0] + x as i32), (d[1] + y as i32), (d[2] + z as i32)){
+            let (rx, ry, rz) = (self.bigpos[0]*SIZE_I+x,
+                                    self.bigpos[1]*SIZE_I+y,
+                                    self.bigpos[2]*SIZE_I+z);
+            if let Some(&Empty) = m.at((d[0] + rx), (d[1] + ry), (d[2] + rz)){
 
-                let (rx, ry, rz) = (self.bigpos[0]*16+x as i32,
-                                    self.bigpos[1]*16+y as i32,
-                                    self.bigpos[2]*16+z as i32);
-                let v = face.vertices([rx as f32, ry as f32, rz as f32], [1f32,1f32,1f32]);
+                let v = vertices_int(f, [rx, ry, rz]);
                 for i in 0..4{
-                    vertices.push(Vertex::new([v[i][0], v[i][1], v[i][2]],
+                    vertices.push(Vertex::new(  [v[i][0] as f32, v[i][1] as f32, v[i][2] as f32],
                                                 [b.textrans[f][0][i] as f32 / TEXWIDTH,
                                                  b.textrans[f][1][i] as f32 / TEXWIDTH],
-                                                 b.color));
+                                                 b.color,
+                                                 get_light(f, get_surroundings(v[i], m))
+                                             ));
                 }
             }
         }}
@@ -186,10 +166,69 @@ impl Chunk {
     }
 }
 
+fn get_light(face: usize, crowd: u8) -> f32{
+    let a = match crowd {
+        0 => 0.0,
+        1 => 0.5,
+        2 => 0.8,
+        _ => 1.0,
+    };
+    match face {
+        0 => 0.2 * a,
+        1 => 0.8 * a,
+        2 => 0.7 * a,
+        3 => 0.3 * a,
+        4 => 0.4 * a,
+        5 => 0.6 * a,
+        _ => 1.0 * a,
+    }
+}
+
+fn get_surroundings(pos: [i32;3], m: &Milieu) -> u8{
+    let (x,y,z) = (pos[0], pos[1], pos[2]);
+    let mut total = 0;
+    if let Some(&Empty) = m.at(x,y,z) { total += 1; }
+    if let Some(&Empty) = m.at(x,y,z-1) { total += 1; }
+    if let Some(&Empty) = m.at(x,y-1,z) { total += 1; }
+    if let Some(&Empty) = m.at(x,y-1,z-1) { total += 1; }
+    if let Some(&Empty) = m.at(x-1,y,z) { total += 1; }
+    if let Some(&Empty) = m.at(x-1,y,z-1) { total += 1; }
+    if let Some(&Empty) = m.at(x-1,y-1,z) { total += 1; }
+    if let Some(&Empty) = m.at(x-1,y-1,z-1) { total += 1; }
+    total
+}
+
+// Stolen/modified from gfx_voxel to use ints rather than floats
+const CUBE_VERTICES: &'static [[i32;3]; 8] = &[
+    [0, 0, 0], // 0
+    [1, 0, 0], // 1
+    [1, 1, 0], // 2
+    [0, 1, 0], // 3
+    [1, 0, 1], // 4
+    [0, 0, 1], // 5
+    [0, 1, 1], // 6
+    [1, 1, 1]  // 7
+];
+
+// Stolen/modified from gfx_voxel to use ints rather than floats
+fn vertices_int(face: usize, base: [i32;3]) -> [[i32;3]; 4] {
+    use gfx_voxel::array::*;
+
+    cube::QUADS[face].map(|i| CUBE_VERTICES[i]).map(|v| {
+        [
+            base[0] + v[0],
+            base[1] + v[1],
+            base[2] + v[2]
+        ]
+    })
+}
+
 pub struct Milieu {
     big: HashMap<(i32, i32, i32), Chunk>,
     cache: HashMap<(i32, i32, i32), Vec<Vertex>>,
+    gen: Gen,
     filled: bool,
+    special: Option<(i32, i32, i32)>,
 }
 
 impl Milieu {
@@ -197,7 +236,9 @@ impl Milieu {
         Milieu{
             big: HashMap::new(),
             cache: HashMap::new(),
+            gen: Gen::new(0),
             filled: true,
+            special: None,
         }
     }
     /*pub fn new_empty() -> Milieu{
@@ -214,10 +255,10 @@ impl Milieu {
     }
     fn splice(&self, x: i32, y: i32, z: i32)
     -> Option<(&Chunk, usize, usize, usize)>{
-        let (bx, by, bz) = (x>>4, y>>4, z>>4);
-        let (sx, sy, sz) = ((x & 15) as usize,
-                            (y & 15) as usize,
-                            (z & 15) as usize);
+        let (bx, by, bz) = (x>>POT, y>>POT, z>>POT);
+        let (sx, sy, sz) = ((x & SIZE_I-1) as usize,
+                            (y & SIZE_I-1) as usize,
+                            (z & SIZE_I-1) as usize);
         match self.get_chunk(bx, by, bz){
             Some(c) => Some((c, sx, sy, sz)),
             None => None
@@ -225,10 +266,10 @@ impl Milieu {
     }
     fn splice_mut(&mut self, x: i32, y: i32, z: i32)
     -> (&mut Chunk, usize, usize, usize){
-        let (bx, by, bz) = (x>>4, y>>4, z>>4);
-        let (sx, sy, sz) = ((x & 15) as usize,
-                            (y & 15) as usize,
-                            (z & 15) as usize);
+        let (bx, by, bz) = (x>>POT, y>>POT, z>>POT);
+        let (sx, sy, sz) = ((x & SIZE_I-1) as usize,
+                            (y & SIZE_I-1) as usize,
+                            (z & SIZE_I-1) as usize);
         let c = self.get_chunk_mut(bx, by, bz);
         (c, sx, sy, sz)
     }
@@ -242,32 +283,28 @@ impl Milieu {
         let (c, sx, sy, sz) = self.splice_mut(x, y, z);
         c.at_mut(sx, sy, sz)
     }
-    pub fn at_or_full(&self, x: i32, y: i32, z: i32) -> &Spot{
-        match self.splice(x, y, z){
-            Some((c, sx, sy, sz)) => &c.at(sx, sy, sz),
-            None => &Empty
-        }
-    }
     pub fn put(&mut self, x: i32, y: i32, z: i32, b: Block){
         let (c, x, y, z) = self.splice_mut(x, y, z);
+        c.update();
         c.put(x, y, z, b);
     }
     pub fn yank(&mut self, x: i32, y: i32, z: i32) -> Option<Block>{
         let (c, sx, sy, sz) = self.splice_mut(x, y, z);
+        c.update();
         c.yank(sx, sy, sz)
     }
     pub fn pull(&mut self, x: i32, y: i32, z: i32) -> Option<Block>{
-        let mut reacher = None;
-        let mut b;
-        {
-            let (c, sx, sy, sz) = self.splice_mut(x, y, z);
-            let (block, reacherblock) = c.pull(sx, sy, sz);
-            reacher = reacherblock.clone();
-            b = block;
+        for face in cube::FaceIterator::new() {
+            let d = face.direction();
+            let (dx, dy, dz) = (x + d[0], y + d[1], z + d[2]);
+            let block = Rich(Box::new(self.gen.at(dx,dy,dz)));
+            let (c, ux, uy, uz) = self.splice_mut(dx,dy,dz);
+            if let b @ &mut Full = c.at_mut(ux, uy, uz){
+                *b = block;
+            }
+            c.update();
         }
-        if let Some(((x,y,z), b)) = reacher {
-            self.put(x, y, z, b); }
-        b
+        self.yank(x,y,z)
     }
     pub fn get_vertex_data(&mut self) -> (Vec<Vertex>, Vec<u32>){
         let mut vertex_data = Vec::new();
