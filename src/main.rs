@@ -54,14 +54,14 @@ gfx_pipeline!( pipe {
 fn main() {
 
     let mut m = Milieu::new_full();
-    for x in 6..10 { for y in 6..10 { for z in 6..10 {
+    for x in -8..8 { for y in 4..12 { for z in -8..8 {
         m.pull(x,y,z);
     }}}
 
     let opengl = OpenGL::V3_2;
 
     let mut window: PistonWindow = PistonWindow::new(opengl, 0,
-        WindowSettings::new("CARVEL", [640, 480])
+        WindowSettings::new("CARVEL", [768, 432])
         .exit_on_esc(true)
         .samples(4)
         .opengl(opengl)
@@ -120,9 +120,9 @@ fn main() {
     first_person_settings.speed_horizontal = 10.0;
     first_person_settings.speed_vertical = 10.0;
     first_person_settings.gravity = 100.0;
-    first_person_settings.jump_force = 25.0;
+    first_person_settings.jump_force = 30.0;
     let mut player = FirstPerson::new(
-        [8.0, 5.0, 8.0],
+        [0.0, 4.0, 0.0],
         first_person_settings
     );
 

@@ -2,6 +2,8 @@
 name = "carvel"
 version = "0.1.0"
 authors = ["Aemetta"]
+description = "Mining game"
+documentation = ""
 
 [dependencies]
 piston_window = "0.73.0"

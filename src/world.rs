@@ -152,12 +152,14 @@ impl Chunk {
 
                 let v = vertices_int(f, [rx, ry, rz]);
                 for i in 0..4{
-                    vertices.push(Vertex::new(  [v[i][0] as f32, v[i][1] as f32, v[i][2] as f32],
-                                                [b.textrans[f][0][i] as f32 / TEXWIDTH,
-                                                 b.textrans[f][1][i] as f32 / TEXWIDTH],
-                                                 b.color,
-                                                 get_light(f, get_surroundings(v[i], m))
-                                             ));
+                    vertices.push(Vertex::new(
+                        [v[i][0] as f32, v[i][1] as f32, v[i][2] as f32],
+                        [b.textrans[f][0][i] as f32 / TEXWIDTH,
+                        b.textrans[f][1][i] as f32 / TEXWIDTH],
+                        b.color,
+                        if m.cursor == Some((rx,ry,rz)) { 1.0
+                        } else { get_light(f, get_surroundings(v[i], m)) }
+                    ));
                 }
             }
         }}
@@ -228,7 +230,7 @@ pub struct Milieu {
     cache: HashMap<(i32, i32, i32), Vec<Vertex>>,
     gen: Gen,
     filled: bool,
-    special: Option<(i32, i32, i32)>,
+    cursor: Option<(i32, i32, i32)>,
 }
 
 impl Milieu {
@@ -238,7 +240,7 @@ impl Milieu {
             cache: HashMap::new(),
             gen: Gen::new(0),
             filled: true,
-            special: None,
+            cursor: None,
         }
     }
     /*pub fn new_empty() -> Milieu{
@@ -305,6 +307,17 @@ impl Milieu {
             c.update();
         }
         self.yank(x,y,z)
+    }
+    pub fn set_cursor(&mut self, new: Option<(i32, i32, i32)>) {
+        if let Some((ox,oy,oz)) = self.cursor {
+            let (c,..) = self.splice_mut(ox,oy,oz);
+            c.update();
+        }
+        self.cursor = new;
+        if let Some((ox,oy,oz)) = self.cursor {
+            let (c,..) = self.splice_mut(ox,oy,oz);
+            c.update();
+        }
     }
     pub fn get_vertex_data(&mut self) -> (Vec<Vertex>, Vec<u32>){
         let mut vertex_data = Vec::new();

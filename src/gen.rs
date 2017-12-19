@@ -1,5 +1,6 @@
 use super::Block;
 use rand;
+use rand::Rng;
 use noise::*;
 
 pub struct Gen {
@@ -21,8 +22,7 @@ impl Gen {
                     self.green.get([x,y,z]) + 1.0,
                      self.blue.get([x,y,z]) + 1.0,
                      1.0];
-        println!("{:?}", color);
         let mut rng = rand::thread_rng();
-        Block::new(0, color)
+        Block::new(rng.gen::<usize>(), color)
     }
 }
