@@ -5,7 +5,7 @@
 
 use input::{ Button, GenericEvent };
 use vecmath;
-use vecmath::traits::{ Float, Radians };
+use vecmath::traits::Radians;
 
 use camera_controllers::Camera;
 
@@ -18,7 +18,7 @@ bitflags!(pub struct Keys: u8 {
     const STRAFE_RIGHT  = 0b00001000;
     const JUMP          = 0b00010000;
     const CRAWL         = 0b00100000;
-    const BOOSTER       = 0b00100000;
+    const BOOSTER       = 0b01000000;
 });
 
 pub struct FirstPersonSettings {
@@ -223,10 +223,9 @@ impl FirstPerson {
 
             let mut bounds = [
                 [if frac[0] < r {-ri} else {-ri+1}, if frac[0] > 1.0-r {ri+1} else {ri}],
-                [0,                                 if frac[1] > 1.0-h {hi+1} else {hi}],
+                [0,                                if frac[1] > 1.0-h {hi+1} else {hi}],
                 [if frac[2] < r {-ri} else {-ri+1}, if frac[2] > 1.0-r {ri+1} else {ri}],
             ];
-
             if pos[0] < 0.0 {bounds[0][0] -= 1; bounds[0][1] -= 1;}
             if pos[1] < 0.0 {bounds[1][0] -= 1; bounds[1][1] -= 1;}
             if pos[2] < 0.0 {bounds[2][0] -= 1; bounds[2][1] -= 1;}
@@ -234,9 +233,10 @@ impl FirstPerson {
             for x in bounds[0][0]..bounds[0][1] {
             for y in bounds[1][0]..bounds[1][1] {
             for z in bounds[2][0]..bounds[2][1] {
-                if let Some(b) = m.at(pos_i[0]+x, pos_i[1]+y, pos_i[2]+z){
+                if let Some(b) = m.world.at(pos_i[0]+x, pos_i[1]+y, pos_i[2]+z){
                 if !b.is_empty() {
-                    if y == bounds[1][0] { if vel[1] <= 0.0 {
+
+                    if y == bounds[1][0] { if vel[1] < 0.0 {
                         pos[1] = pos[1].ceil() + y as f64;
                         if keys.contains(Keys::JUMP) {
                             vel[1] *= -1.0;
@@ -244,25 +244,25 @@ impl FirstPerson {
                             vel[1] = 0.0;
                             *on_ground = true;
                         }
-                    }} else if y == bounds[1][1] { if vel[1] >= 0.0 {
+                    }} else if y == bounds[1][1] { if vel[1] > 0.0 {
                         vel[1] = 0.0;
                         pos[1] = (pos_i[1]-y) as f64 + h;
                     }} else {
-                        if x == bounds[0][0] && vel[0] <= 0.0 {
+                        if x == bounds[0][0] && vel[0] < 0.0 {
                             vel[0] = 0.0;
-                            pos[0] = pos_i[0] as f64;
+                            pos[0] = pos_i[0] as f64 - (1.0 - r);
                         }
-                        if x == bounds[0][1] && vel[0] >= 0.0 {
+                        if x+1 == bounds[0][1] && vel[0] > 0.0 {
                             vel[0] = 0.0;
-                            pos[0] = pos_i[0] as f64;
+                            pos[0] = pos_i[0] as f64 + (1.0 - r);
                         }
-                        if z == bounds[2][0] && vel[2] <= 0.0 {
+                        if z == bounds[2][0] && vel[2] < 0.0 {
                             vel[2] = 0.0;
-                            pos[2] = pos_i[2] as f64;
+                            pos[2] = pos_i[2] as f64 - (1.0 - r);
                         }
-                        if z == bounds[2][1] && vel[2] >= 0.0 {
+                        if z+1 == bounds[2][1] && vel[2] > 0.0 {
                             vel[2] = 0.0;
-                            pos[2] = pos_i[2] as f64;
+                            pos[2] = pos_i[2] as f64 + (1.0 - r);
                         }
                     }
                 }}
@@ -401,8 +401,8 @@ fn select(pos: [f32;3], dir: [f32;3], m: &mut world::Milieu)
                     (end[0], end[1], end[2]))
                     .enumerate() {
 
-        if let Some(b) = m.at(x, y, z){
-            if !b.is_empty() {
+        if let Some(b) = m.world.at(x, y, z){
+            if b.is_rich() {
                 empty = temp;
                 full = Some((x, y, z));
                 break;

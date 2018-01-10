@@ -117,12 +117,12 @@ fn main() {
     };
 
     let mut first_person_settings = FirstPersonSettings::keyboard_wars();
-    first_person_settings.speed_horizontal = 10.0;
-    first_person_settings.speed_vertical = 10.0;
-    first_person_settings.gravity = 100.0;
-    first_person_settings.jump_force = 30.0;
+    first_person_settings.speed_horizontal = 3.0;
+    first_person_settings.speed_vertical = 3.0;
+    first_person_settings.gravity = 10.0;
+    first_person_settings.jump_force = 7.0;
     let mut player = FirstPerson::new(
-        [0.0, 4.0, 0.0],
+        [0.0, 8.0, 0.0],
         first_person_settings
     );
 
@@ -144,12 +144,9 @@ fn main() {
         player.event(&e, &mut m);
 
         window.draw_3d(&e, |window| {
-            let args = e.render_args().unwrap();
-
             window.encoder.clear(&window.output_color, [0.0, 1.0, 1.0, 1.0]);
             window.encoder.clear_depth(&window.output_stencil, 1.0);
             
-            //m.refresh();
             let (vertex_data, index_data) = m.get_vertex_data();
 
             let (vbuf, slice) = factory.create_vertex_buffer_with_slice
