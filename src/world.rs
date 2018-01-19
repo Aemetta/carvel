@@ -53,7 +53,7 @@ impl Block {
     pub fn get_vertex_data(&self) -> &RefCell<Vec<Vertex>> {
         &self.vertices
     }
-    pub fn update_surface(&self, x: i32, y: i32, z: i32, w: &InfiniteWorld, shiny: bool) {
+    pub fn update_surface(&self, x: i32, y: i32, z: i32, w: &InfiniteWorld, shiny: f32) {
         let mut vertices = Vec::new();
 
         for f in 0..6 {
@@ -68,8 +68,7 @@ impl Block {
                             [self.textrans[f][0][i] as f32 / TEXWIDTH,
                              self.textrans[f][1][i] as f32 / TEXWIDTH],
                         self.color,
-                        if shiny { 1.0
-                        } else { get_light(f, get_surroundings(v[i], w)) }
+                        shiny * get_light(f, get_surroundings(v[i], w))
                     ));
                 }
             }
@@ -156,10 +155,6 @@ impl Spot {
         else if let &Full = self { false }
         else { true }
     }
-    pub fn unwrap(&self) -> &Box<Block> {
-        if let &Rich(ref b) = self { b }
-        else {panic!("Unwrapped a Spot with a non-rich value: {:?}", self);}
-    }
     pub fn unwrap_mut(&mut self) -> &mut Box<Block> {
         if let &mut Rich(ref mut b) = self { b }
         else {panic!("Unwrapped a Spot with a non-rich value");}
@@ -204,23 +199,7 @@ impl Chunk {
         assert!(x < SIZE_U && y < SIZE_U && z < SIZE_U);
         &mut self.small[x][y][z]
     }
-    fn try_at(&self, x: usize, y: usize, z: usize) -> Option<&Spot> {
-        if x < SIZE_U && y < SIZE_U && z < SIZE_U {
-            Some(&self.small[x][y][z])
-        } else {None}
-    }
-    fn try_at_mut(&mut self, x: usize, y: usize, z: usize) -> Option<&mut Spot> {
-        if x < SIZE_U && y < SIZE_U && z < SIZE_U {
-            Some(&mut self.small[x][y][z])
-        } else {None}
-    }
-    fn nearly_at<'a>(&'a self, w: &'a InfiniteWorld, x: i32, y: i32, z: i32) -> Option<&'a Spot> {
-        match self.try_at(x as usize, y as usize, z as usize){
-            Some(s) => {Some(s)}
-            None => {w.at(self.bigpos[0]+x, self.bigpos[1]+y, self.bigpos[2]+z)}
-        }
-    }
-    fn put(&mut self, x: usize, y: usize, z: usize, mut b: Block) -> &mut Block {
+    fn put(&mut self, x: usize, y: usize, z: usize, b: Block) -> &mut Block {
         assert!(x < SIZE_U && y < SIZE_U && z < SIZE_U);
         self.small[x][y][z] = Rich(Box::new(b));
         self.at_mut(x, y, z).unwrap_mut()
@@ -301,10 +280,6 @@ impl InfiniteWorld {
             None => None
         }
     }
-    pub fn at_mut(&mut self, x: i32, y: i32, z: i32) -> &mut Spot{
-        let (c, sx, sy, sz) = self.splice_mut(x, y, z);
-        c.at_mut(sx, sy, sz)
-    }
     pub fn chunks(&mut self) -> ValuesMut<(i32, i32, i32), Chunk>{
         self.chunks.values_mut()
     }
@@ -314,22 +289,20 @@ pub struct Milieu {
     pub world: InfiniteWorld,
     surfacecache: HashMap<(i32, i32, i32), Vec<Vertex>>,
     gen: Gen,
-    filled: bool,
-    cursor: Option<(i32, i32, i32)>,
+    shiny: Vec<(i32, i32, i32, f32)>,
 }
 
 impl Milieu {
-    pub fn new_full() -> Milieu{
+    pub fn new_full(seed: usize) -> Milieu{
         Milieu{
             world: InfiniteWorld::new_full(),
             surfacecache: HashMap::new(),
-            gen: Gen::new(0),
-            filled: true,
-            cursor: None,
+            gen: Gen::new(seed),
+            shiny: Vec::new(),
         }
     }
-    pub fn put(&mut self, rx: i32, ry: i32, rz: i32, mut b: Block){
-        b.update_surface(rx, ry, rz, &self.world, true);
+    pub fn put(&mut self, rx: i32, ry: i32, rz: i32, b: Block){
+        b.update_surface(rx, ry, rz, &self.world, 1.0);
         let (c, x, y, z) = self.world.splice_mut(rx, ry, rz);
         c.put(x, y, z, b);
     }
@@ -348,28 +321,30 @@ impl Milieu {
                 *b = block;
             }
         }
-        for dx in x-1..x+1 { for dy in y-1..y+1 { for dz in z-1..z+1 {
+        for dx in x-1..x+2 { for dy in y-1..y+2 { for dz in z-1..z+2 {
             if let Some(s) = self.world.at_update(dx,dy,dz) {
             if let &Rich(ref b) = s {
-                b.update_surface(dx, dy, dz, &self.world, false);
+                b.update_surface(dx, dy, dz, &self.world, 1.0);
             }}
         }}}
         ret
     }
-    pub fn set_cursor(&mut self, new: Option<(i32, i32, i32)>) {
-        if let Some((x,y,z)) = self.cursor {
+    pub fn set_shiny(&mut self, x: i32, y: i32, z: i32, shine: f32) {
+        if let Some(s) = self.world.at_update(x,y,z) {
+        if let &Rich(ref b) = s {
+            b.update_surface(x, y, z, &self.world, shine);
+        }}
+        self.shiny.push((x,y,z,shine));
+    }
+    pub fn clear_shiny(&mut self) {
+        for i in 0..self.shiny.len() {
+            let (x, y, z, _) = self.shiny[i];
             if let Some(s) = self.world.at_update(x,y,z) {
             if let &Rich(ref b) = s {
-                b.update_surface(x, y, z, &self.world, false);
+                b.update_surface(x, y, z, &self.world, 1.0);
             }}
         }
-        self.cursor = new;
-        if let Some((x,y,z)) = self.cursor {
-            if let Some(s) = self.world.at_update(x,y,z) {
-            if let &Rich(ref b) = s {
-                b.update_surface(x, y, z, &self.world, true);
-            }}
-        }
+        self.shiny = Vec::new();
     }
     pub fn get_vertex_data(&mut self) -> (Vec<Vertex>, Vec<u32>){
         let mut vertex_data = Vec::new();
@@ -396,6 +371,7 @@ impl Milieu {
             let l = (i*4) as u32;
             index_data.extend_from_slice(&[l+0,l+1,l+2,l+0,l+2,l+3]);
         }
+        self.clear_shiny();
 
         (vertex_data, index_data)
     }

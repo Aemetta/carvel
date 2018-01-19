@@ -44,11 +44,12 @@ pub struct FirstPersonSettings {
     pub hitbox_radius: f64,
     pub hitbox_height: f64,
     pub hitbox_height_crawl: f64,
+    pub interaction_cooldown: f32,
 }
 
 impl FirstPersonSettings
 {
-    pub fn keyboard_wasd() -> FirstPersonSettings {
+/*    pub fn keyboard_wasd() -> FirstPersonSettings {
         use input::Button::{Keyboard, Mouse};
         use input::Key;
         use input::mouse::MouseButton;
@@ -77,7 +78,7 @@ impl FirstPersonSettings
             hitbox_height: 2.8,
             hitbox_height_crawl: 0.9,
         }
-    }
+    }*/
 
     pub fn keyboard_wars() -> FirstPersonSettings {
         use input::Button::{Keyboard, Mouse};
@@ -107,6 +108,7 @@ impl FirstPersonSettings
             hitbox_radius: 0.7,
             hitbox_height: 2.8,
             hitbox_height_crawl: 0.9,
+            interaction_cooldown: 0.1,
         }
     }
 }
@@ -120,16 +122,19 @@ use self::InteractionState::{Idle,Mining,Placing};
 
 pub struct FirstPerson {
     pub settings: FirstPersonSettings,
+    pub debug_info: String,
     state: InteractionState,
     pub yaw: f32,
     pub pitch: f32,
     pub dir: [f32; 3],
     pub pos: [f64; 3],
+    pub cam: [f64; 3],
     pub vel: [f32; 3],
     keys: Keys,
+    pub crawling: bool,
     pub on_ground: bool,
     pub noclip: bool,
-    pub force: f32,
+    pub clock: f32,
 }
 
 impl FirstPerson {
@@ -139,25 +144,29 @@ impl FirstPerson {
     ) -> FirstPerson {
         FirstPerson {
             settings: settings,
+            debug_info: String::from(""),
             state: Idle,
             yaw: 0.0,
             pitch: 0.0,
             keys: Keys::empty(),
             dir: [0.0, 0.0, 0.0],
             pos: pos,
-            force: 1.0,
+            cam: pos,
             vel: [0.0, 0.0, 0.0],
+            crawling: false,
             on_ground: true,
             noclip: false,
+            clock: 0.0,
         }
     }
 
     pub fn camera(&self) -> Camera<f32> {
-        let yoffset = if self.keys.contains(Keys::CRAWL) && !self.noclip
+        let p = if self.noclip { self.cam } else { self.pos };
+        let yoffset = if self.crawling && !self.noclip
         {self.settings.head_offset_crawl} else {self.settings.head_offset};
-        let mut c = Camera::new([self.pos[0] as f32,
-                                 self.pos[1] as f32 + yoffset,
-                                 self.pos[2] as f32]);
+        let mut c = Camera::new([p[0] as f32,
+                                 p[1] as f32 + yoffset,
+                                 p[2] as f32]);
         c.set_yaw_pitch(self.yaw, self.pitch);
         c
     }
@@ -166,7 +175,9 @@ impl FirstPerson {
 
         let c = self.camera();
         let (point_full, point_empty) = select(c.position, c.forward, m);
-        m.set_cursor(point_full);
+        if let Some((a,b,c)) = point_full{
+            m.set_shiny(a, b, c, 1.5);
+        }
         let &mut FirstPerson {
             ref mut yaw,
             ref mut pitch,
@@ -174,11 +185,15 @@ impl FirstPerson {
             ref mut dir,
             ref mut vel,
             ref mut pos,
-            ref mut force,
+            ref mut cam,
+
+            ref mut crawling,
             ref mut on_ground,
             ref mut state,
             ref mut noclip,
+            ref mut clock,
             ref settings,
+            ref mut debug_info,
             ..
         } = self;
 
@@ -186,106 +201,187 @@ impl FirstPerson {
         let sqrt2: f32 = 1.41421356237309504880168872420969808;
 
         e.update(|args| {
+
             let dt = args.dt as f32;
+
+            //BLOCK INTERACTION
+
+            *clock -= dt;
+            if *clock <= 0.0 {
+                *clock += settings.interaction_cooldown;
+                match *state {
+                    Idle => {},
+                    Mining => {
+                        if let Some((x,y,z)) = point_full {
+                            m.pull(x,y,z);
+                        }
+                    },
+                    Placing => {
+                        if let Some((x,y,z)) = point_empty {
+                            m.put(x,y,z, world::Block::new(
+                                0, [1.0, 1.0, 1.0, 1.0]
+                            ));
+                        }
+                    },
+                }
+            }
+
+            //MOVEMENT
+
             let (dx, dy, dz) = (dir[0], dir[1], dir[2]);
             let (s, c) = (yaw.sin(), yaw.cos());
 
-            let dh = *force * settings.speed_horizontal;
-            let (xo, zo) = ((s * dx - c * dz) * dh,
-                            (s * dz + c * dx) * dh);
-            if *on_ground {
-                vel[0] = xo;
-                vel[1] = dy * settings.speed_vertical;
-                vel[2] = zo;
-            } else {
-                vel[0] += xo * dt * 5.0;
-                vel[1] += -settings.gravity * dt;
-                vel[2] += zo * dt * 5.0;
+            let dh = settings.speed_horizontal * if *crawling && !*noclip { 0.5 } else { 1.0 };
+            let (mut xo, yo, mut zo) = 
+                    ((s * dx - c * dz) * dh,
+                    dy * settings.speed_vertical,
+                    (s * dz + c * dx) * dh);
+            
+            if *noclip {
+                cam[0] += (xo * 4.0 * dt) as f64;
+                cam[1] += (yo * 4.0 * dt) as f64;
+                cam[2] += (zo * 4.0 * dt) as f64;
+                xo = 0.0; zo = 0.0;
             }
 
-            pos[0] += (vel[0] * dt) as f64;
-            pos[1] += (vel[1] * dt) as f64;
-            pos[2] += (vel[2] * dt) as f64;
+            if *on_ground {
+                vel[1] += -settings.gravity;
+                vel[0] = vel[0] / 2.0 + xo;
+                vel[2] = vel[2] / 2.0 + zo;
+            } else {
+                vel[1] += -settings.gravity;
+                vel[0] += xo * 0.1;
+                vel[2] += zo * 0.1;
+            }
+            let mut mov = [
+                pos[0] + (vel[0] * dt) as f64,
+                pos[1] + (vel[1] * dt) as f64,
+                pos[2] + (vel[2] * dt) as f64,
+            ];
 
 
             //COLLISION DETECTION
 
             *on_ground = false;
 
-            let pos_i = [pos[0] as i32, pos[1] as i32, pos[2] as i32];
             let (r, h) = (settings.hitbox_radius,
-                            if keys.contains(Keys::CRAWL)
+                            if *crawling
                             {settings.hitbox_height_crawl} else 
                             {settings.hitbox_height});
-            let (ri, hi) = (r.ceil() as i32, h.ceil() as i32);
 
-            let frac = [(pos[0]%1.0+1.0)%1.0, (pos[1]%1.0+1.0)%1.0, (pos[2]%1.0+1.0)%1.0];
+            let bound = |p: f64, r: f64| {
+                let frac = (p%1.0+1.0)%1.0;
+                let ri = r.ceil() as i32;
+                let (b1, b2) = (if frac < r%1.0 {-ri} else {-ri+1}, if frac > 1.0-r%1.0 {ri} else {ri-1});
+                if p < 0.0 && frac != 0.0 {(b1-1, b2-1)} else {(b1, b2)}
+            };
+            let bound_v = |p: f64, h: f64| {
+                let frac = (p%1.0+1.0)%1.0;
+                let hi = h.ceil() as i32;
+                let (b1, b2) = (0, if frac > 1.0-h%1.0 {hi} else {hi-1});
+                if p < 0.0 && frac != 0.0 {(b1-1, b2-1)} else {(b1, b2)}
+            };
 
-            let mut bounds = [
-                [if frac[0] < r {-ri} else {-ri+1}, if frac[0] > 1.0-r {ri+1} else {ri}],
-                [0,                                if frac[1] > 1.0-h {hi+1} else {hi}],
-                [if frac[2] < r {-ri} else {-ri+1}, if frac[2] > 1.0-r {ri+1} else {ri}],
-            ];
-            if pos[0] < 0.0 {bounds[0][0] -= 1; bounds[0][1] -= 1;}
-            if pos[1] < 0.0 {bounds[1][0] -= 1; bounds[1][1] -= 1;}
-            if pos[2] < 0.0 {bounds[2][0] -= 1; bounds[2][1] -= 1;}
+            let mut collision_debug = [None;3];
 
-            for x in bounds[0][0]..bounds[0][1] {
-            for y in bounds[1][0]..bounds[1][1] {
-            for z in bounds[2][0]..bounds[2][1] {
-                if let Some(b) = m.world.at(pos_i[0]+x, pos_i[1]+y, pos_i[2]+z){
+            let (bx1, bx2) = bound(pos[0], r);
+            let (by1, by2) = bound_v(mov[1], h);
+            let (bz1, bz2) = bound(pos[2], r);
+            let safety_margin = (1.0 - r%1.0) - 0.000001;
+
+            if vel[1] != 0.0 {
+            let y = if vel[1] < 0.0 { by1 } else { by2 };
+        'y: for x in bx1..bx2+1 {
+            for z in bz1..bz2+1 {
+                let (bx, by, bz) = (pos[0] as i32+x, mov[1] as i32+y, pos[2] as i32+z);
+                if let Some(b) = m.world.at(bx, by, bz){/*
+                        if let Some(spot) = m.world.at(pos_i[0]+x, pos_i[1]+y+1, pos_i[2]+z){
+                        spot.is_empty() } else { false }*/
                 if !b.is_empty() {
-
-                    if y == bounds[1][0] { if vel[1] < 0.0 {
-                        pos[1] = pos[1].ceil() + y as f64;
+                    vel[1] = 0.0;
+                    if y == by1 {
+                        mov[1] = mov[1].ceil() as f64;
                         if keys.contains(Keys::JUMP) {
-                            vel[1] *= -1.0;
+                            vel[1] = settings.jump_force;
                         } else {
-                            vel[1] = 0.0;
                             *on_ground = true;
                         }
-                    }} else if y == bounds[1][1] { if vel[1] > 0.0 {
-                        vel[1] = 0.0;
-                        pos[1] = (pos_i[1]-y) as f64 + h;
-                    }} else {
-                        if x == bounds[0][0] && vel[0] < 0.0 {
-                            vel[0] = 0.0;
-                            pos[0] = pos_i[0] as f64 - (1.0 - r);
-                        }
-                        if x+1 == bounds[0][1] && vel[0] > 0.0 {
-                            vel[0] = 0.0;
-                            pos[0] = pos_i[0] as f64 + (1.0 - r);
-                        }
-                        if z == bounds[2][0] && vel[2] < 0.0 {
-                            vel[2] = 0.0;
-                            pos[2] = pos_i[2] as f64 - (1.0 - r);
-                        }
-                        if z+1 == bounds[2][1] && vel[2] > 0.0 {
-                            vel[2] = 0.0;
-                            pos[2] = pos_i[2] as f64 + (1.0 - r);
-                        }
+                    } else {
+                        mov[1] = mov[1].floor() + (1.0 - h%1.0) - 0.000001;
                     }
+                    collision_debug[1] = Some((bx, by, bz));
+                    break 'y;
                 }}
             }}}
 
+            let (by1, by2) = bound_v(mov[1], h);
+            let (bx1, bx2) = bound(mov[0], r);
 
-            //BLOCK INTERACTION
+            if vel[0] != 0.0 {
+            let x = if vel[0] < 0.0 { bx1 } else { bx2 };
+        'x: for y in by1..by2+1 {
+            for z in bz1..bz2+1 {
+                let (bx, by, bz) = (mov[0] as i32+x, mov[1] as i32+y, pos[2] as i32+z);
+                if let Some(b) = m.world.at(bx, by, bz){
+                if !b.is_empty() {
+                    vel[0] = 0.0;
+                    if x == bx1 {
+                        mov[0] = mov[0].ceil() - safety_margin;
+                    } else {
+                        mov[0] = mov[0].floor() + safety_margin;
+                    }
+                    collision_debug[0] = Some((bx, by, bz));
+                    break 'x;
+                }}
+            }}}
 
-            match *state {
-                Idle => {},
-                Mining => {
-                    if let Some((x,y,z)) = point_full {
-                        m.pull(x,y,z);
+            let (bx1, bx2) = bound(mov[0], r);
+            let (bz1, bz2) = bound(mov[2], r);
+
+            if vel[2] != 0.0 {
+            let z = if vel[2] < 0.0 { bz1 } else { bz2 };
+        'z: for y in by1..by2+1 {
+            for x in bx1..bx2+1 {
+                let (bx, by, bz) = (mov[0] as i32+x, mov[1] as i32+y, mov[2] as i32+z);
+                if let Some(b) = m.world.at(bx, by, bz){
+                if !b.is_empty() {
+                    vel[2] = 0.0;
+                    if z == bz1 {
+                        mov[2] = mov[2].ceil() - safety_margin;
+                    } else {
+                        mov[2] = mov[2].floor() + safety_margin;
                     }
-                },
-                Placing => {
-                    if let Some((x,y,z)) = point_empty {
-                        m.put(x,y,z, world::Block::new(
-                            0, [1.0, 1.0, 1.0, 1.0]
-                        ));
-                    }
-                },
+                    collision_debug[2] = Some((bx, by, bz));
+                    break 'z;
+                }}
+            }}}
+
+            pos[0] = mov[0];
+            pos[1] = mov[1];
+            pos[2] = mov[2];
+
+            if *crawling && !keys.contains(Keys::CRAWL) {
+                let by1 = by2;
+                let (_, by2) = bound_v(pos[1], settings.hitbox_height);
+                *crawling = false;
+        'crawl: for y in by1..by2+1 {
+                for x in bx1..bx2+1 {
+                for z in bx1..bx2+1 {
+                    let (bx, by, bz) = (mov[0] as i32+x, mov[1] as i32+y, mov[2] as i32+z);
+                    if let Some(b) = m.world.at(bx, by, bz){
+                    if !b.is_empty() {
+                        *crawling = true;
+                        break 'crawl;
+                    }}
+                }}}
             }
+
+            *debug_info = format!(
+                "{:.6}\t{:.6}\t{:?}\n{:.6}\t{:.6}\t{:?}\n{:.6}\t{:.6}\t{:?}\n",
+                
+                pos[1], vel[1], collision_debug[1],
+                pos[0], vel[0], collision_debug[0],
+                pos[2], vel[2], collision_debug[2]);
         });
 
         e.mouse_relative(|dx, dy| {
@@ -320,24 +416,28 @@ impl FirstPerson {
                     set(Keys::STRAFE_LEFT, dx, dy, 1.0),
                 x if x == settings.strafe_right_button =>
                     set(Keys::STRAFE_RIGHT, dx, dy, -1.0),
-                x if x == settings.jump_button => {
-                    set(Keys::JUMP, dx, 0.0, dz);
-                    if *on_ground {
-                        *on_ground = false;
-                        vel[1] += settings.jump_force;
-                    }},
+                x if x == settings.jump_button => 
+                    set(Keys::JUMP, dx, 1.0, dz),
                 x if x == settings.crawl_button => {
-                    set(Keys::CRAWL, dx, 0.0, dz);
-                    *force = 1.0 / 2.0;},
+                    set(Keys::CRAWL, dx, -1.0, dz);
+                    if !*noclip { *crawling = true; } },
                 x if x == settings.booster_button => {},
                 x if x == settings.break_button => {
                     *state = Mining;
+                    *clock = 0.0;
                 },
                 x if x == settings.place_button => {
                     *state = Placing;
+                    *clock = 0.0;
                 },
-                x if x == settings.drop_player_button => {*noclip = false;},
-                x if x == settings.drop_camera_button => {*noclip = true;},
+                x if x == settings.drop_player_button => {
+                    if *noclip { *noclip = false; *pos = cam.clone(); }
+                    else { *pos = cam.clone(); }
+                },
+                x if x == settings.drop_camera_button => {
+                    if *noclip { *noclip = false; *cam = pos.clone(); }
+                    else { *noclip = true; *cam = pos.clone(); }
+                },
                 _ => {}
             }
         });
@@ -366,10 +466,10 @@ impl FirstPerson {
                     set(dx, dy, release(Keys::STRAFE_LEFT, Keys::STRAFE_RIGHT, -1.0)),
                 x if x == settings.strafe_right_button =>
                     set(dx, dy, release(Keys::STRAFE_RIGHT, Keys::STRAFE_LEFT, 1.0)),
-                x if x == settings.jump_button => { release(Keys::JUMP, Keys::CRAWL, 0.0); },
+                x if x == settings.jump_button => {
+                    set(dx, release(Keys::JUMP, Keys::CRAWL, 1.0), dz); },
                 x if x == settings.crawl_button => {
-                    release(Keys::CRAWL, Keys::JUMP, 0.0);
-                    *force = 1.0;},
+                    set(dx, release(Keys::CRAWL, Keys::JUMP, 1.0), dz); },
                 x if x == settings.booster_button => {},
                 x if x == settings.break_button => {
                     *state = Idle;

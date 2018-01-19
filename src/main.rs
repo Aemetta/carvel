@@ -36,6 +36,7 @@ use camera_controllers::{
     model_view_projection
 };
 use gfx_voxel::texture;
+use rand::Rng;
 
 //----------------------------------------
 // Cube associated data
@@ -53,8 +54,10 @@ gfx_pipeline!( pipe {
 
 fn main() {
 
-    let mut m = Milieu::new_full();
-    for x in -8..8 { for y in 4..12 { for z in -8..8 {
+    let mut rng = rand::thread_rng();
+    let mut m = Milieu::new_full(rng.gen::<usize>());
+    m.pull(1,0,0); //the first pulled block never actually gets pulled
+    for x in 0..4 { for y in 0..4 { for z in 0..4 {
         m.pull(x,y,z);
     }}}
 
@@ -88,7 +91,7 @@ fn main() {
     let mut glyphs = Glyphs::new(font, window.factory.clone(), TextureSettings::new()).unwrap();
 
     let mut atlas = texture::AtlasBuilder::new(assets.join("blocks"), 256, 256);
-    let offset = atlas.load("ground");
+    let _offset = atlas.load("ground");
     let texture = atlas.complete(factory);
 
     let sinfo = gfx::texture::SamplerInfo::new(
@@ -111,7 +114,7 @@ fn main() {
     let get_projection = |w: &PistonWindow| {
         let draw_size = w.window.draw_size();
         CameraPerspective {
-            fov: 90.0, near_clip: 0.1, far_clip: 1000.0,
+            fov: 110.0, near_clip: 0.05, far_clip: 1000.0,
             aspect_ratio: (draw_size.width as f32) / (draw_size.height as f32)
         }.projection()
     };
@@ -119,10 +122,10 @@ fn main() {
     let mut first_person_settings = FirstPersonSettings::keyboard_wars();
     first_person_settings.speed_horizontal = 3.0;
     first_person_settings.speed_vertical = 3.0;
-    first_person_settings.gravity = 10.0;
-    first_person_settings.jump_force = 7.0;
+    first_person_settings.gravity = 0.2;
+    first_person_settings.jump_force = 10.0;
     let mut player = FirstPerson::new(
-        [0.0, 8.0, 0.0],
+        [2.0, 0.0, 2.0],
         first_person_settings
     );
 
@@ -167,6 +170,13 @@ fn main() {
                 &mut glyphs,
                 &c.draw_state,
                 c.transform.trans(5.0, 20.0),
+                g
+            ).unwrap();
+            text::Text::new_color([1.0, 1.0, 0.0, 1.0], 14).draw(
+                &player.debug_info,
+                &mut glyphs,
+                &c.draw_state,
+                c.transform.trans(5.0, 40.0),
                 g
             ).unwrap();
         });
