@@ -17,6 +17,6 @@ camera_controllers = "0.23.0"
 rand = "0.3.14"
 shader_version = "0.3.0"
 bitflags = "1.0.1"
-line_drawing = "0.6.0"
+line_drawing = { git = "https://github.com/dNihil/line_drawing" }
 noise = "0.4.1"
 fps_counter = "1.0.0"

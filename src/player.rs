@@ -33,12 +33,20 @@ pub struct FirstPersonSettings {
     pub place_button: Button,
     pub drop_player_button: Button,
     pub drop_camera_button: Button,
-    pub speed_horizontal: f32,
-    pub speed_vertical: f32,
     pub mouse_sensitivity_horizontal: f32,
     pub mouse_sensitivity_vertical: f32,
+
+    pub speed_horizontal: f32,
+    pub speed_vertical: f32,
     pub gravity: f32,
     pub jump_force: f32,
+
+    pub grip_ground: f32,
+    pub grip_air: f32,
+    pub friction_ground: f32,
+    pub friction_air: f32,
+    pub static_friction_cutoff: f32,
+
     pub head_offset: f32,
     pub head_offset_crawl: f32,
     pub hitbox_radius: f64,
@@ -97,10 +105,15 @@ impl FirstPersonSettings
             place_button: Mouse(MouseButton::Right),
             drop_player_button: Keyboard(Key::F7),
             drop_camera_button: Keyboard(Key::F8),
-            speed_horizontal: 1.0,
-            speed_vertical: 1.0,
-            gravity: 1.0,
-            jump_force: 1.0,
+            speed_horizontal: 3.0,
+            speed_vertical: 3.0,
+            gravity: 0.2,
+            jump_force: 12.0,
+            friction_ground: 0.5,
+            friction_air: 0.0001,
+            grip_ground: 1.0,
+            grip_air: 0.02,
+            static_friction_cutoff: 1.5,
             mouse_sensitivity_horizontal: 1.0,
             mouse_sensitivity_vertical: 1.0,
             head_offset: 2.4,
@@ -122,7 +135,6 @@ use self::InteractionState::{Idle,Mining,Placing};
 
 pub struct FirstPerson {
     pub settings: FirstPersonSettings,
-    pub debug_info: String,
     state: InteractionState,
     pub yaw: f32,
     pub pitch: f32,
@@ -135,6 +147,7 @@ pub struct FirstPerson {
     pub on_ground: bool,
     pub noclip: bool,
     pub clock: f32,
+    pub debug_info: [[String; 3]; 3],
 }
 
 impl FirstPerson {
@@ -144,7 +157,6 @@ impl FirstPerson {
     ) -> FirstPerson {
         FirstPerson {
             settings: settings,
-            debug_info: String::from(""),
             state: Idle,
             yaw: 0.0,
             pitch: 0.0,
@@ -157,6 +169,7 @@ impl FirstPerson {
             on_ground: true,
             noclip: false,
             clock: 0.0,
+            debug_info: Default::default(),
         }
     }
 
@@ -244,15 +257,41 @@ impl FirstPerson {
                 xo = 0.0; zo = 0.0;
             }
 
-            if *on_ground {
-                vel[1] += -settings.gravity;
-                vel[0] = vel[0] / 2.0 + xo;
-                vel[2] = vel[2] / 2.0 + zo;
-            } else {
-                vel[1] += -settings.gravity;
-                vel[0] += xo * 0.1;
-                vel[2] += zo * 0.1;
+            let (grip, friction) = if *on_ground {
+                    (settings.grip_ground, settings.friction_ground)
+                } else {
+                    (settings.grip_air, settings.friction_air)
+                };
+
+            let (xo, zo) = (xo * grip, zo * grip);
+            let mut accel = [xo, -settings.gravity, zo];
+
+            let speed = vecmath::vec3_len(*vel);
+            if speed <= settings.static_friction_cutoff && *on_ground {
+                vel[0] = 0.0; vel[1] = 0.0; vel[2] = 0.0;
+            } else if speed != 0.0 {
+                let dir = vecmath::vec3_normalized(*vel);
+                let ndir = vecmath::vec3_neg(dir);
+                let friction = friction * speed;
+                let force = vecmath::vec3_scale(ndir, friction);
+                accel = vecmath::vec3_add(accel, force);
             }
+
+            let (a, b) = (accel[0], accel[2]);
+            if !*on_ground {
+                let max_move_speed = settings.speed_horizontal / settings.friction_ground;
+                let proposed = vecmath::vec2_len([vel[0] + a, vel[2] + b]);
+                if max_move_speed < proposed {
+                    let softened_move = vecmath::vec2_scale([vel[0] + a, vel[2] + b],
+                                                            max_move_speed / proposed);
+                    accel[0] = softened_move[0] - vel[0];
+                    accel[2] = softened_move[1] - vel[2];
+                }
+            }
+
+            vel[0] += accel[0];
+            vel[1] += accel[1];
+            vel[2] += accel[2];
             let mut mov = [
                 pos[0] + (vel[0] * dt) as f64,
                 pos[1] + (vel[1] * dt) as f64,
@@ -356,6 +395,12 @@ impl FirstPerson {
                 }}
             }}}
 
+            for i in 0..3 {
+                debug_info[i][0] = format!("{:.4}", pos[i]);
+                debug_info[i][1] = format!("{:.4}", vel[i]);
+                debug_info[i][2] = format!("{:?}", collision_debug[i]);
+            }
+
             pos[0] = mov[0];
             pos[1] = mov[1];
             pos[2] = mov[2];
@@ -375,13 +420,6 @@ impl FirstPerson {
                     }}
                 }}}
             }
-
-            *debug_info = format!(
-                "{:.6}\t{:.6}\t{:?}\n{:.6}\t{:.6}\t{:?}\n{:.6}\t{:.6}\t{:?}\n",
-                
-                pos[1], vel[1], collision_debug[1],
-                pos[0], vel[0], collision_debug[0],
-                pos[2], vel[2], collision_debug[2]);
         });
 
         e.mouse_relative(|dx, dy| {

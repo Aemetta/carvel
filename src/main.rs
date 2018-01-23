@@ -57,7 +57,7 @@ fn main() {
     let mut rng = rand::thread_rng();
     let mut m = Milieu::new_full(rng.gen::<usize>());
     m.pull(1,0,0); //the first pulled block never actually gets pulled
-    for x in 0..4 { for y in 0..4 { for z in 0..4 {
+    for x in 0..16 { for y in 0..4 { for z in 0..16 {
         m.pull(x,y,z);
     }}}
 
@@ -119,14 +119,9 @@ fn main() {
         }.projection()
     };
 
-    let mut first_person_settings = FirstPersonSettings::keyboard_wars();
-    first_person_settings.speed_horizontal = 3.0;
-    first_person_settings.speed_vertical = 3.0;
-    first_person_settings.gravity = 0.2;
-    first_person_settings.jump_force = 10.0;
     let mut player = FirstPerson::new(
         [2.0, 0.0, 2.0],
-        first_person_settings
+        FirstPersonSettings::keyboard_wars()
     );
 
     let mut data = pipe::Data {
@@ -172,13 +167,16 @@ fn main() {
                 c.transform.trans(5.0, 20.0),
                 g
             ).unwrap();
-            text::Text::new_color([1.0, 1.0, 0.0, 1.0], 14).draw(
-                &player.debug_info,
-                &mut glyphs,
-                &c.draw_state,
-                c.transform.trans(5.0, 40.0),
-                g
-            ).unwrap();
+            for row in 0..3 {
+            for column in 0..3 {
+                text::Text::new_color([1.0, 1.0, 1.0, 1.0], 14).draw(
+                    &player.debug_info[row][column],
+                    &mut glyphs,
+                    &c.draw_state,
+                    c.transform.trans(5.0+column as f64*80.0, 40.0+row as f64*20.0),
+                    g
+                ).unwrap();
+            }}
         });
 
         if let Some(_) = e.resize_args() {
