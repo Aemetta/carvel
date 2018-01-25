@@ -105,14 +105,14 @@ impl FirstPersonSettings
             place_button: Mouse(MouseButton::Right),
             drop_player_button: Keyboard(Key::F7),
             drop_camera_button: Keyboard(Key::F8),
-            speed_horizontal: 3.0,
+            speed_horizontal: 4.0,
             speed_vertical: 3.0,
             gravity: 0.2,
-            jump_force: 12.0,
+            jump_force: 10.3,
             friction_ground: 0.5,
-            friction_air: 0.0001,
+            friction_air: 0.002,
             grip_ground: 1.0,
-            grip_air: 0.02,
+            grip_air: 0.06,
             static_friction_cutoff: 1.5,
             mouse_sensitivity_horizontal: 1.0,
             mouse_sensitivity_vertical: 1.0,
@@ -279,7 +279,7 @@ impl FirstPerson {
 
             let (a, b) = (accel[0], accel[2]);
             if !*on_ground {
-                let max_move_speed = settings.speed_horizontal / settings.friction_ground;
+                let max_move_speed = dh / settings.friction_ground;
                 let proposed = vecmath::vec2_len([vel[0] + a, vel[2] + b]);
                 if max_move_speed < proposed {
                     let softened_move = vecmath::vec2_scale([vel[0] + a, vel[2] + b],
