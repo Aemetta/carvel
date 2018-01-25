@@ -57,7 +57,7 @@ pub struct FirstPersonSettings {
 
 impl FirstPersonSettings
 {
-/*    pub fn keyboard_wasd() -> FirstPersonSettings {
+    pub fn keyboard_wasd() -> FirstPersonSettings {
         use input::Button::{Keyboard, Mouse};
         use input::Key;
         use input::mouse::MouseButton;
@@ -67,37 +67,6 @@ impl FirstPersonSettings
             move_backward_button: Keyboard(Key::S),
             strafe_left_button: Keyboard(Key::A),
             strafe_right_button: Keyboard(Key::D),
-            jump_button: Keyboard(Key::Space),
-            crawl_button: Keyboard(Key::LShift),
-            booster_button: Keyboard(Key::LCtrl),
-            break_button: Mouse(MouseButton::Left),
-            place_button: Keyboard(Key::E),
-            drop_player_button: Keyboard(Key::F7),
-            drop_camera_button: Keyboard(Key::F8),
-            speed_horizontal: 1.0,
-            speed_vertical: 1.0,
-            gravity: 1.0,
-            jump_force: 1.0,
-            mouse_sensitivity_horizontal: 1.0,
-            mouse_sensitivity_vertical: 1.0,
-            head_offset: 2.4,
-            head_offset_crawl: 0.8,
-            hitbox_radius: 0.7,
-            hitbox_height: 2.8,
-            hitbox_height_crawl: 0.9,
-        }
-    }*/
-
-    pub fn keyboard_wars() -> FirstPersonSettings {
-        use input::Button::{Keyboard, Mouse};
-        use input::Key;
-        use input::mouse::MouseButton;
-
-        FirstPersonSettings {
-            move_forward_button: Keyboard(Key::W),
-            move_backward_button: Keyboard(Key::R),
-            strafe_left_button: Keyboard(Key::A),
-            strafe_right_button: Keyboard(Key::S),
             jump_button: Keyboard(Key::Space),
             crawl_button: Keyboard(Key::LShift),
             booster_button: Keyboard(Key::LCtrl),
@@ -123,6 +92,20 @@ impl FirstPersonSettings
             hitbox_height_crawl: 0.9,
             interaction_cooldown: 0.1,
         }
+    }
+
+    pub fn keyboard_wars() -> FirstPersonSettings {
+        use input::Button::{Keyboard};
+        use input::Key;
+
+        let mut wars = FirstPersonSettings::keyboard_wasd();
+
+        wars.move_forward_button = Keyboard(Key::W);
+        wars.move_backward_button = Keyboard(Key::R);
+        wars.strafe_left_button = Keyboard(Key::A);
+        wars.strafe_right_button = Keyboard(Key::S);
+
+        wars
     }
 }
 

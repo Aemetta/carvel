@@ -21,7 +21,7 @@ impl Game {
 
         let p = FirstPerson::new(
             [8.0, 0.0, 8.0],
-            FirstPersonSettings::keyboard_wars()
+            FirstPersonSettings::keyboard_wasd()
         );
 
         Game {
