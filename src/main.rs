@@ -62,13 +62,13 @@ fn main() {
     let opengl = OpenGL::V3_2;
 
     let mut window: PistonWindow = PistonWindow::new(opengl, 0,
-        WindowSettings::new("CARVEL", [768, 432])
-        .exit_on_esc(true)
-        .samples(4)
-        .opengl(opengl)
-        .srgb(false)
-        .build()
-        .unwrap());
+        if let Ok(w) = WindowSettings::new("CARVEL", [768, 432])
+            .opengl(opengl).build() {
+            w
+        } else {
+            WindowSettings::new("CARVEL", [768, 432])
+            .opengl(opengl).srgb(false).build().unwrap()
+        });
 
     let ref mut factory = window.factory.clone();
 
