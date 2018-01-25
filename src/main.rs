@@ -14,6 +14,9 @@ extern crate line_drawing;
 extern crate noise;
 extern crate fps_counter;
 
+mod game;
+use game::*;
+
 mod player;
 use player::{
     FirstPersonSettings,
@@ -54,12 +57,7 @@ gfx_pipeline!( pipe {
 
 fn main() {
 
-    let mut rng = rand::thread_rng();
-    let mut m = Milieu::new_full(rng.gen::<usize>());
-    m.pull(1,0,0); //the first pulled block never actually gets pulled
-    for x in 0..16 { for y in 0..4 { for z in 0..16 {
-        m.pull(x,y,z);
-    }}}
+    let mut game = Game::new();
 
     let opengl = OpenGL::V3_2;
 
@@ -119,11 +117,6 @@ fn main() {
         }.projection()
     };
 
-    let mut player = FirstPerson::new(
-        [2.0, 0.0, 2.0],
-        FirstPersonSettings::keyboard_wars()
-    );
-
     let mut data = pipe::Data {
         vbuf: factory.create_vertex_buffer(&[]),
         u_model_view_proj: [[0.0; 4]; 4],
@@ -139,19 +132,19 @@ fn main() {
     let mut fps_counter = fps_counter::FPSCounter::new();
 
     while let Some(e) = window.next() {
-        player.event(&e, &mut m);
+        game.update(&e);
 
         window.draw_3d(&e, |window| {
             window.encoder.clear(&window.output_color, [0.0, 1.0, 1.0, 1.0]);
             window.encoder.clear_depth(&window.output_stencil, 1.0);
             
-            let (vertex_data, index_data) = m.get_vertex_data();
+            let (vertex_data, index_data) = game.milieu.get_vertex_data();
 
             let (vbuf, slice) = factory.create_vertex_buffer_with_slice
                 (&vertex_data, index_data.as_slice());
 
             data.vbuf = vbuf.clone();
-            let c = player.camera();
+            let c = game.player.camera();
 
             data.u_model_view_proj = model_view_projection(model, c.orthogonal(), projection);
 
@@ -170,7 +163,7 @@ fn main() {
             for row in 0..3 {
             for column in 0..3 {
                 text::Text::new_color([1.0, 1.0, 1.0, 1.0], 14).draw(
-                    &player.debug_info[row][column],
+                    &game.player.debug_info[row][column],
                     &mut glyphs,
                     &c.draw_state,
                     c.transform.trans(5.0+column as f64*80.0, 40.0+row as f64*20.0),

@@ -1,6 +1,5 @@
 use super::Block;
-use rand;
-use rand::Rng;
+use rand::{self, Rng};
 use noise::*;
 
 pub struct Gen {
