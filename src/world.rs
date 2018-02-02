@@ -329,6 +329,37 @@ impl Milieu {
         }}}
         ret
     }
+    pub fn viewcast(&self, pos: [f32;3], dir: [f32;3])
+            -> (Option<(i32, i32, i32)>, Option<(i32, i32, i32)>){
+        let mut full = None;
+        let mut empty = None;
+
+        use line_drawing::WalkVoxels;
+        use vecmath;
+        let dir = vecmath::vec3_neg(dir);
+        let dir = vecmath::vec3_scale(dir, 10.0);
+        let end = vecmath::vec3_add(pos, dir);
+
+        let mut temp = None;
+        for (_, (x, y, z)) in WalkVoxels::<f32, i32>::new(
+                        (pos[0], pos[1], pos[2]),
+                        (end[0], end[1], end[2]))
+                        .enumerate() {
+
+            if let Some(b) = self.world.at(x, y, z){
+                if b.is_rich() {
+                    empty = temp;
+                    full = Some((x, y, z));
+                    break;
+                } else {
+                    temp = Some((x, y, z));
+                }
+            } else {
+                temp = Some((x, y, z));
+            }
+        }
+        (full, empty)
+    }
     pub fn set_shiny(&mut self, x: i32, y: i32, z: i32, shine: f32) {
         if let Some(s) = self.world.at_update(x,y,z) {
         if let &Rich(ref b) = s {

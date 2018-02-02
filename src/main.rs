@@ -7,8 +7,6 @@ extern crate gfx_voxel;
 extern crate shader_version;
 extern crate find_folder;
 extern crate rand;
-#[macro_use]
-extern crate bitflags;
 extern crate input;
 extern crate line_drawing;
 extern crate noise;
@@ -18,15 +16,14 @@ mod game;
 use game::*;
 
 mod player;
-use player::{
-    FirstPersonSettings,
-    FirstPerson
-};
+use player::Player;
 
 mod world;
 use world::{
     Vertex, Block, Spot, Milieu
 };
+
+mod controls;
 
 mod gen;
 
@@ -132,7 +129,7 @@ fn main() {
     let mut fps_counter = fps_counter::FPSCounter::new();
 
     while let Some(e) = window.next() {
-        game.update(&e);
+        game.event(&e);
 
         window.draw_3d(&e, |window| {
             window.encoder.clear(&window.output_color, [0.0, 1.0, 1.0, 1.0]);

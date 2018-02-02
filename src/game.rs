@@ -1,12 +1,14 @@
-use input::{ Button, GenericEvent };
+use input::GenericEvent;
 
 use world::*;
 use player::*;
+use controls::*;
 use rand::{self, Rng};
 
 pub struct Game {
     pub milieu: Milieu,
-    pub player: FirstPerson,
+    pub player: Player,
+    pub controls: PlayerController,
 }
 
 impl Game {
@@ -19,18 +21,35 @@ impl Game {
             m.pull(x,y,z);
         }}}
 
-        let p = FirstPerson::new(
+        let p = Player::new(
             [8.0, 0.0, 8.0],
-            FirstPersonSettings::keyboard_wasd()
         );
 
         Game {
             milieu: m,
             player: p,
+            controls: PlayerController::keyboard_wasd(),
         }
     }
 
-    pub fn update<E>(&mut self, e: &E) where E: GenericEvent {
-        self.player.event(e, &mut self.milieu);
+    pub fn event<E: GenericEvent>(&mut self, e: &E) {
+
+        e.mouse_relative(|dx, dy| {
+            self.controls.mouse_movement(dx as f32, dy as f32, &mut self.player);
+        });
+
+        e.press(|button| {
+            self.controls.input(button, true, &mut self.player);
+        });
+        e.release(|button| {
+            self.controls.input(button, false, &mut self.player);
+        });
+
+        e.update(|args| {
+
+            let dt = args.dt as f32;
+            
+            self.player.update(dt, &mut self.milieu);
+        });
     }
 }
