@@ -334,7 +334,7 @@ impl Milieu {
         let mut full = None;
         let mut empty = None;
 
-        use line_drawing::WalkVoxels;
+        use line_drawing::{ VoxelOrigin, WalkVoxels };
         use vecmath;
         let dir = vecmath::vec3_neg(dir);
         let dir = vecmath::vec3_scale(dir, 10.0);
@@ -343,7 +343,8 @@ impl Milieu {
         let mut temp = None;
         for (_, (x, y, z)) in WalkVoxels::<f32, i32>::new(
                         (pos[0], pos[1], pos[2]),
-                        (end[0], end[1], end[2]))
+                        (end[0], end[1], end[2]),
+                        &VoxelOrigin::Corner)
                         .enumerate() {
 
             if let Some(b) = self.world.at(x, y, z){
