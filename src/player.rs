@@ -31,7 +31,6 @@ pub enum InteractionState {
     Mining,
     Placing,
 }
-use self::InteractionState::{Idle,Mining,Placing};
 
 pub enum CrawlState {
     Stand,
@@ -68,7 +67,7 @@ impl Player {
         pos: [f64; 3],
     ) -> Player {
         Player {
-            state: Idle,
+            state: InteractionState::Idle,
             yaw: 0.0,
             pitch: 0.0,
             dir: [0.0, 0.0, 0.0],

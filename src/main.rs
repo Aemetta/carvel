@@ -145,10 +145,6 @@ fn main() {
     window.set_capture_cursor(true);
     let mut fps_counter = fps_counter::FPSCounter::new();
 
-    loadstatus(&mut window, &mut glyphs, "Loading World");
-
-    let mut game = Game::new();
-
     loadstatus(&mut window, &mut glyphs, "Loading Character");
 
     use collada::document::ColladaDocument;
@@ -186,6 +182,11 @@ fn main() {
 
     let mut skinned_renderer = SkinnedRenderer::<_, Matrix4<f32>>::
     from_collada(factory, collada_document, vec!["assets/vug/char.png"]).unwrap();
+    
+
+    loadstatus(&mut window, &mut glyphs, "Loading World");
+
+    let mut game = Game::new();
 
 
     while let Some(e) = window.next() {
