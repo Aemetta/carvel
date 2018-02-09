@@ -344,7 +344,7 @@ impl Milieu {
         for (_, (x, y, z)) in WalkVoxels::<f32, i32>::new(
                         (pos[0], pos[1], pos[2]),
                         (end[0], end[1], end[2]),
-                        &VoxelOrigin::Center)
+                        &VoxelOrigin::Corner)
                         .enumerate() {
 
             if let Some(b) = self.world.at(x, y, z){

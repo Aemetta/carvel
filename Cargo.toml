@@ -23,3 +23,6 @@ collada = "0.5.0"
 skeletal_animation = "0.23.0"
 gfx_debug_draw = "0.19.0"
 gfx_text = "0.20.0"
+
+[patch.crates-io]
+line_drawing = { git = 'https://github.com/dNihil/line_drawing' }
