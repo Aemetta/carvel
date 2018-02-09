@@ -6,7 +6,8 @@ use camera_controllers::Camera;
 
 use world;
 
-const SPEED_HORIZONTAL:        f32 = 4.0;
+const SPEED_HORIZONTAL:        f32 = 2.8;
+const SPEED_HORIZONTAL_CRAWL:  f32 = 1.3;
 const SPEED_VERTICAL:          f32 = 3.0;
 const GRAVITY:                 f32 = 0.2;
 const JUMP_FORCE:              f32 = 10.3;
@@ -17,8 +18,8 @@ const GRIP_GROUND:             f32 = 1.0;
 const GRIP_AIR:                f32 = 0.06;
 const STATIC_FRICTION_CUTOFF:  f32 = 1.5;
 
-const HEAD_OFFSET:             f32 = 2.4;
-const HEAD_OFFSET_CRAWL:       f32 = 0.8;
+const HEAD_OFFSET:             f32 = 2.15;
+const HEAD_OFFSET_CRAWL:       f32 = 0.6;
 const HITBOX_RADIUS:           f64 = 0.7;
 const HITBOX_HEIGHT:           f64 = 2.8;
 const HITBOX_HEIGHT_CRAWL:     f64 = 0.9;
@@ -127,7 +128,6 @@ impl Player {
 
         let &mut Player {
             ref mut yaw,
-            ref mut pitch,
             ref mut dir,
             ref mut vel,
             ref mut pos,
@@ -136,7 +136,6 @@ impl Player {
             ref mut crawl,
             ref mut jump,
             ref mut on_ground,
-            ref mut state,
             ref mut noclip,
             ref mut debug_info,
             ..
@@ -147,7 +146,7 @@ impl Player {
         let (dx, dy, dz) = (dir[0], dir[1], dir[2]);
         let (s, c) = (yaw.sin(), yaw.cos());
 
-        let dh = SPEED_HORIZONTAL * if crawl.is_crawling() && !*noclip { 0.5 } else { 1.0 };
+        let dh =  if crawl.is_crawling() && !*noclip { SPEED_HORIZONTAL_CRAWL } else { SPEED_HORIZONTAL };
         let (mut xo, yo, mut zo) = 
                 ((s * dx - c * dz) * dh,
                 dy * SPEED_VERTICAL,
@@ -181,15 +180,13 @@ impl Player {
         }
 
         let (a, b) = (accel[0], accel[2]);
-        if !*on_ground {
-            let max_move_speed = dh / FRICTION_GROUND;
-            let proposed = vecmath::vec2_len([vel[0] + a, vel[2] + b]);
-            if max_move_speed < proposed {
-                let softened_move = vecmath::vec2_scale([vel[0] + a, vel[2] + b],
-                                                        max_move_speed / proposed);
-                accel[0] = softened_move[0] - vel[0];
-                accel[2] = softened_move[1] - vel[2];
-            }
+        let max_move_speed = dh / FRICTION_GROUND;
+        let proposed = vecmath::vec2_len([vel[0] + a, vel[2] + b]);
+        if max_move_speed < proposed {
+            let softened_move = vecmath::vec2_scale([vel[0] + a, vel[2] + b],
+                                                    max_move_speed / proposed);
+            accel[0] = softened_move[0] - vel[0];
+            accel[2] = softened_move[1] - vel[2];
         }
 
         vel[0] += accel[0];

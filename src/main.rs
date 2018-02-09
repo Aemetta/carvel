@@ -4,6 +4,8 @@ extern crate camera_controllers;
 #[macro_use]
 extern crate gfx;
 extern crate gfx_voxel;
+extern crate gfx_text;
+extern crate gfx_debug_draw;
 extern crate shader_version;
 extern crate find_folder;
 extern crate rand;
@@ -11,16 +13,17 @@ extern crate input;
 extern crate line_drawing;
 extern crate noise;
 extern crate fps_counter;
+extern crate collada;
+extern crate skeletal_animation;
 
 mod game;
 use game::*;
 
 mod player;
-use player::Player;
 
 mod world;
 use world::{
-    Vertex, Block, Spot, Milieu
+    Vertex, Block, Spot
 };
 
 mod controls;
@@ -36,7 +39,6 @@ use camera_controllers::{
     model_view_projection
 };
 use gfx_voxel::texture;
-use rand::Rng;
 
 //----------------------------------------
 // Cube associated data
@@ -54,7 +56,20 @@ gfx_pipeline!( pipe {
 
 fn main() {
 
-    let mut game = Game::new();
+    let loadstatus = |window: &mut PistonWindow, glyphs: &mut Glyphs, message: &str| {
+        if let Some(e) = window.next() {
+            window.draw_2d(&e, |c, g| {
+            clear([0.0, 0.0, 0.0, 1.0], g);
+            text::Text::new_color([1.0, 1.0, 1.0, 1.0], 18).draw(
+                message,
+                glyphs,
+                &c.draw_state,
+                c.transform.trans(5.0, 10.0),
+                g
+            ).unwrap();
+        });
+        } else { panic!("Could not display load status"); }
+    };
 
     let opengl = OpenGL::V3_2;
 
@@ -72,6 +87,11 @@ fn main() {
     let assets = find_folder::Search::ParentsThenKids(3, 3)
         .for_folder("assets").unwrap();
     
+    let ref font = assets.join("VeraMono.ttf");
+    let mut glyphs = Glyphs::new(font, window.factory.clone(), TextureSettings::new()).unwrap();
+
+    loadstatus(&mut window, &mut glyphs, "Loading Textures");
+
     let crosshair = assets.join("crosshair.png");
     let crosshair: G2dTexture = Texture::from_path(
             &mut window.factory,
@@ -81,9 +101,6 @@ fn main() {
         ).unwrap();
     let mut reticule: (f64, f64) = (0f64, 0f64);
     let draw_state = piston_window::DrawState::new_alpha();
-
-    let ref font = assets.join("VeraMono.ttf");
-    let mut glyphs = Glyphs::new(font, window.factory.clone(), TextureSettings::new()).unwrap();
 
     let mut atlas = texture::AtlasBuilder::new(assets.join("blocks"), 256, 256);
     let _offset = atlas.load("ground");
@@ -128,6 +145,49 @@ fn main() {
     window.set_capture_cursor(true);
     let mut fps_counter = fps_counter::FPSCounter::new();
 
+    loadstatus(&mut window, &mut glyphs, "Loading World");
+
+    let mut game = Game::new();
+
+    loadstatus(&mut window, &mut glyphs, "Loading Character");
+
+    use collada::document::ColladaDocument;
+    use skeletal_animation::*;
+    use std::rc::Rc;
+    use std::path::Path;
+    use vecmath::Matrix4;
+    use gfx_debug_draw::DebugRenderer;
+
+    let mut debug_renderer = {
+        let text_renderer = {
+            gfx_text::new(window.factory.clone()).unwrap()
+        };
+        DebugRenderer::new(window.factory.clone(), text_renderer, 64).ok().unwrap()
+    };
+
+    let collada_document = ColladaDocument::
+    from_path(&Path::new("assets/vug/character.dae")).unwrap();
+
+    let skeleton = {
+        let skeleton_set = collada_document.get_skeletons().unwrap();
+        Skeleton::from_collada(&skeleton_set[0])
+    };
+
+    let skeleton = Rc::new(skeleton);
+
+    let mut asset_manager = AssetManager::<QVTransform>::new();
+
+    asset_manager.load_assets("assets/vug/animation.json");
+
+    let controller_def = asset_manager.controller_defs["vug"].clone();
+
+    let mut controller = AnimationController::
+    new(controller_def, skeleton.clone(), &asset_manager.animation_clips);
+
+    let mut skinned_renderer = SkinnedRenderer::<_, Matrix4<f32>>::
+    from_collada(factory, collada_document, vec!["assets/vug/char.png"]).unwrap();
+
+
     while let Some(e) = window.next() {
         game.event(&e);
 
@@ -141,11 +201,21 @@ fn main() {
                 (&vertex_data, index_data.as_slice());
 
             data.vbuf = vbuf.clone();
-            let c = game.player.camera();
+            let camera = game.player.camera().orthogonal();
 
-            data.u_model_view_proj = model_view_projection(model, c.orthogonal(), projection);
+            data.u_model_view_proj = model_view_projection(model, camera, projection);
 
             window.encoder.draw(&slice, &pso, &data);
+
+            controller.update(0.02);
+            let mut global_poses = [ Matrix4::<f32>::identity(); 64 ];
+            controller.get_output_pose(0.02, &mut global_poses[0 .. skeleton.joints.len()]);
+            let camera_projection = model_view_projection(
+                model, camera, projection
+            );
+            skinned_renderer.render(&mut window.encoder, &window.output_color, &window.output_stencil,
+                                    camera, camera_projection, &global_poses);
+            skeleton.draw(&global_poses, &mut debug_renderer, true);
         });
 
         window.draw_2d(&e, |c, g| {

@@ -17,18 +17,18 @@ impl Game {
         let mut rng = rand::thread_rng();
         let mut m = Milieu::new_full(rng.gen::<usize>());
         m.pull(1,0,0); //the first pulled block never actually gets pulled
-        for x in 0..16 { for y in 0..7 { for z in 0..16 {
+        for x in -6..6 { for y in 0..7 { for z in -6..6 {
             m.pull(x,y,z);
         }}}
 
         let p = Player::new(
-            [8.0, 0.0, 8.0],
+            [0.0, 0.0, 3.0],
         );
 
         Game {
             milieu: m,
             player: p,
-            controls: PlayerController::keyboard_wasd(),
+            controls: PlayerController::keyboard_wars(),
         }
     }
 
