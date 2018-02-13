@@ -4,7 +4,8 @@ use input::Button::{Keyboard, Mouse};
 use input::Key;
 use input::mouse::MouseButton;
 
-use player::InteractionState;
+use tool;
+use tool::InteractionState;
 
 struct Control {
     button: Button,
@@ -99,7 +100,7 @@ impl PlayerController {
         player.pitch = (player.pitch).min(PI / 2.0).max(-PI / 2.0);
     }
 
-    pub fn input(&mut self, button: Button, on: bool, player: &mut Player) {
+    pub fn input(&mut self, button: Button, on: bool, player: &mut Player, tool: &mut tool::Tool) {
 
         let &mut Player {
             ref mut dir,
@@ -140,14 +141,14 @@ impl PlayerController {
                 }},
             x if self.booster.flip(x, on) => { self.booster.flop(); },
             x if self.break_block.flip(x, on) => { self.break_block.flop();
-                if on { player.state = InteractionState::Mining;
-                        if player.clock < 0.0 { player.clock = 0.0; } }
-                else  { player.state = InteractionState::Idle; }
+                if on { tool.state = InteractionState::Mining;
+                        if tool.clock < 0.0 { tool.clock = 0.0; } }
+                else  { tool.state = InteractionState::Idle; }
             },
             x if self.place_block.flip(x, on) => { self.place_block.flop();
-                if on { player.state = InteractionState::Placing;
-                        if player.clock < 0.0 { player.clock = 0.0; } }
-                else  { player.state = InteractionState::Idle; }
+                if on { tool.state = InteractionState::Placing;
+                        if tool.clock < 0.0 { tool.clock = 0.0; } }
+                else  { tool.state = InteractionState::Idle; }
             },
             x if self.drop_player.flip(x, on) => { self.drop_player.flop(); if on {
                 if *noclip { *noclip = false; *pos = cam.clone(); }

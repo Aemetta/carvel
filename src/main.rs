@@ -27,7 +27,8 @@ use world::{
 };
 
 mod controls;
-
+mod bag;
+mod tool;
 mod gen;
 
 use piston_window::*;

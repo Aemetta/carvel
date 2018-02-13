@@ -24,14 +24,6 @@ const HITBOX_RADIUS:           f64 = 0.7;
 const HITBOX_HEIGHT:           f64 = 2.8;
 const HITBOX_HEIGHT_CRAWL:     f64 = 0.9;
 
-const INTERACTION_COOLDOWN:    f32 = 0.1;
-
-pub enum InteractionState {
-    Idle,
-    Mining,
-    Placing,
-}
-
 pub enum CrawlState {
     Stand,
     Crawl,
@@ -47,7 +39,6 @@ impl CrawlState {
 }
 
 pub struct Player {
-    pub state: InteractionState,
     pub yaw: f32,
     pub pitch: f32,
     pub dir: [f32; 3],
@@ -58,7 +49,6 @@ pub struct Player {
     pub jump: bool,
     pub on_ground: bool,
     pub noclip: bool,
-    pub clock: f32,
     pub debug_info: [[String; 3]; 3],
 }
 
@@ -67,7 +57,6 @@ impl Player {
         pos: [f64; 3],
     ) -> Player {
         Player {
-            state: InteractionState::Idle,
             yaw: 0.0,
             pitch: 0.0,
             dir: [0.0, 0.0, 0.0],
@@ -78,7 +67,6 @@ impl Player {
             jump: false,
             on_ground: true,
             noclip: false,
-            clock: 0.0,
             debug_info: Default::default(),
         }
     }
@@ -95,35 +83,6 @@ impl Player {
     }
 
     pub fn update(&mut self, dt: f32, m: &mut world::Milieu) {
-
-        //BLOCK INTERACTION
-
-        let c = self.camera();
-        let (point_full, point_empty) = m.viewcast(c.position, c.forward);
-        if let Some((a,b,c)) = point_full{
-            m.set_shiny(a, b, c, 1.5);
-        }
-
-        self.clock -= dt;
-        if self.clock <= 0.0 {
-            match self.state {
-                InteractionState::Idle => {},
-                InteractionState::Mining => {
-                    if let Some((x,y,z)) = point_full {
-                        m.pull(x,y,z);
-                        self.clock += INTERACTION_COOLDOWN;
-                    }
-                },
-                InteractionState::Placing => {
-                    if let Some((x,y,z)) = point_empty {
-                        m.put(x,y,z, world::Block::new(
-                            0, [1.0, 1.0, 1.0, 1.0]
-                        ));
-                        self.clock += INTERACTION_COOLDOWN;
-                    }
-                },
-            }
-        }
 
         let &mut Player {
             ref mut yaw,

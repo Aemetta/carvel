@@ -1,12 +1,16 @@
 use input::GenericEvent;
 
 use world::*;
+use tool::*;
+use bag::*;
 use player::*;
 use controls::*;
 use rand::{self, Rng};
 
 pub struct Game {
     pub milieu: Milieu,
+    pub tool: Tool,
+    //pub bag: Bag,
     pub player: Player,
     pub controls: PlayerController,
 }
@@ -27,6 +31,7 @@ impl Game {
 
         Game {
             milieu: m,
+            tool: Tool::new(),
             player: p,
             controls: PlayerController::keyboard_wars(),
         }
@@ -39,17 +44,18 @@ impl Game {
         });
 
         e.press(|button| {
-            self.controls.input(button, true, &mut self.player);
+            self.controls.input(button, true, &mut self.player, &mut self.tool);
         });
         e.release(|button| {
-            self.controls.input(button, false, &mut self.player);
+            self.controls.input(button, false, &mut self.player, &mut self.tool);
         });
 
         e.update(|args| {
 
             let dt = args.dt as f32;
-            
+
             self.player.update(dt, &mut self.milieu);
+            self.tool.update(dt, &mut self.milieu, &self.player);
         });
     }
 }
